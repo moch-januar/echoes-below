@@ -524,7 +524,7 @@ export function getRoomConnections(): RoomConnection[] {
 // ── Player Start Positions ──────────────────────────────────────────────────
 
 export const START_POSITIONS: Record<string, { x: number; y: number }> = {
-  intake: { x: 160, y: 320 },
+  intake: { x: 160, y: 260 },
 };
 
 // ── Room Order (progression) ────────────────────────────────────────────────

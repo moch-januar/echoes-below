@@ -150,7 +150,7 @@ export interface GameSettings {
 // ── Defaults ───────────────────────────────────────────────────────────────
 
 const DEFAULT_PLAYER: PlayerState = {
-  x: 160, y: 320, angle: 0,
+  x: 160, y: 260, angle: 0,
   health: 100, maxHealth: 100, healthState: 'fine',
   infected: 0,
   isRunning: false, isCrouching: false, isAiming: false,

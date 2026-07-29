@@ -16,9 +16,9 @@ const ROOM_SCALE = 1 / TILE;
 const WALL_HEIGHT = 2.6;
 const PLAYER_HEIGHT = 1.72;
 const PLAYER_RADIUS = 0.28;
-const CAMERA_HEIGHT = 1.45;
-const CAMERA_DISTANCE = 3.4;
-const CAMERA_SHOULDER_OFFSET = 0.55;
+const CAMERA_HEIGHT = 5.1;
+const CAMERA_DISTANCE = 5.85;
+const CAMERA_SHOULDER_OFFSET = 0.72;
 const MAX_PIXEL_RATIO = 1.75;
 
 function toSceneX(px: number): number {
@@ -31,6 +31,10 @@ function toSceneZ(py: number): number {
 
 function tileCenter(tile: number): number {
   return tile + 0.5;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function disposeObject(object: THREE.Object3D) {
@@ -79,14 +83,14 @@ export class GameRenderer3D {
   private cameraVelocity = new THREE.Vector3();
 
   private materials = {
-    floor: new THREE.MeshStandardMaterial({ color: 0x2b2c31, roughness: 0.78, metalness: 0.05 }),
-    carpet: new THREE.MeshStandardMaterial({ color: 0x24202b, roughness: 0.96, metalness: 0.0 }),
-    metal: new THREE.MeshStandardMaterial({ color: 0x2c323a, roughness: 0.48, metalness: 0.65 }),
-    wall: new THREE.MeshStandardMaterial({ color: 0x171922, roughness: 0.72, metalness: 0.1 }),
-    debris: new THREE.MeshStandardMaterial({ color: 0x4a372c, roughness: 0.9, metalness: 0.02 }),
-    water: new THREE.MeshStandardMaterial({ color: 0x1b496d, roughness: 0.18, metalness: 0.0, transparent: true, opacity: 0.72 }),
-    spore: new THREE.MeshStandardMaterial({ color: 0x6a4b28, roughness: 0.7, metalness: 0.02, emissive: 0x2b1707, emissiveIntensity: 0.45 }),
-    ceiling: new THREE.MeshStandardMaterial({ color: 0x101218, roughness: 0.82, metalness: 0.15, transparent: true, opacity: 0.38 }),
+    floor: new THREE.MeshStandardMaterial({ color: 0x3a3d45, roughness: 0.72, metalness: 0.08, emissive: 0x080c12, emissiveIntensity: 0.2 }),
+    carpet: new THREE.MeshStandardMaterial({ color: 0x30283c, roughness: 0.94, metalness: 0.0, emissive: 0x090611, emissiveIntensity: 0.18 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x3a4652, roughness: 0.42, metalness: 0.62, emissive: 0x080e14, emissiveIntensity: 0.2 }),
+    wall: new THREE.MeshStandardMaterial({ color: 0x2c303c, roughness: 0.68, metalness: 0.12, emissive: 0x070911, emissiveIntensity: 0.24 }),
+    debris: new THREE.MeshStandardMaterial({ color: 0x665143, roughness: 0.86, metalness: 0.02 }),
+    water: new THREE.MeshStandardMaterial({ color: 0x2d78a8, roughness: 0.16, metalness: 0.0, transparent: true, opacity: 0.78, emissive: 0x061c2d, emissiveIntensity: 0.22 }),
+    spore: new THREE.MeshStandardMaterial({ color: 0x8a6738, roughness: 0.66, metalness: 0.02, emissive: 0x3b1e09, emissiveIntensity: 0.65 }),
+    ceiling: new THREE.MeshStandardMaterial({ color: 0x1d202b, roughness: 0.8, metalness: 0.12, transparent: true, opacity: 0.06, depthWrite: false }),
     playerSuit: new THREE.MeshStandardMaterial({ color: 0x263447, roughness: 0.55, metalness: 0.2 }),
     playerVisor: new THREE.MeshStandardMaterial({ color: 0x68c7ff, roughness: 0.22, metalness: 0.35, emissive: 0x163552, emissiveIntensity: 0.8 }),
     interactable: new THREE.MeshStandardMaterial({ color: 0x89d7ff, roughness: 0.3, metalness: 0.1, emissive: 0x1e7fb2, emissiveIntensity: 1.4 }),
@@ -128,13 +132,13 @@ export class GameRenderer3D {
     this.renderer.setClearColor(0x030407, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.35;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x030407);
-    this.scene.fog = new THREE.FogExp2(0x07080c, 0.075);
+    this.scene.background = new THREE.Color(0x080b12);
+    this.scene.fog = new THREE.FogExp2(0x0a0d14, 0.038);
 
     this.camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.05, 80);
     this.camera.position.set(0, CAMERA_HEIGHT, CAMERA_DISTANCE);
@@ -152,7 +156,7 @@ export class GameRenderer3D {
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(this.outputPass);
 
-    this.playerSpot = new THREE.SpotLight(0xdbe8ff, 7, 8, Math.PI / 6, 0.55, 1.3);
+    this.playerSpot = new THREE.SpotLight(0xeaf3ff, 13, 13, Math.PI / 4.2, 0.62, 1.05);
     this.playerSpot.castShadow = true;
     this.playerSpot.shadow.mapSize.set(1024, 1024);
     this.playerSpot.shadow.bias = -0.0004;
@@ -160,7 +164,11 @@ export class GameRenderer3D {
 
     this.scene.add(this.roomGroup, this.dynamicGroup, this.particleGroup, this.playerGroup);
     this.scene.add(this.playerSpot, this.playerSpotTarget, this.muzzleLight);
-    this.scene.add(new THREE.HemisphereLight(0x273752, 0x060608, 0.22));
+    this.scene.add(new THREE.HemisphereLight(0x6f86aa, 0x0c0a0f, 0.55));
+    const cinematicFill = new THREE.DirectionalLight(0x9ab7f0, 0.48);
+    cinematicFill.position.set(-4, 5, -3);
+    cinematicFill.castShadow = false;
+    this.scene.add(cinematicFill);
     this.buildPlayer();
   }
 
@@ -193,10 +201,10 @@ export class GameRenderer3D {
     this.updateCinematicCamera(state);
 
     const settings = useGameStore.getState().settings;
-    if (settings.qualityPreset === 'low') {
-      this.renderer.render(this.scene, this.camera);
-    } else {
+    if (settings.qualityPreset === 'high') {
       this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
     }
   }
 
@@ -220,11 +228,11 @@ export class GameRenderer3D {
     this.renderer.shadowMap.enabled = !low;
     this.ssaoPass.enabled = !low;
     this.bloomPass.enabled = !low;
-    this.bloomPass.strength = high ? 0.58 : 0.35;
-    this.bloomPass.radius = high ? 0.62 : 0.42;
-    this.scene.fog = new THREE.FogExp2(0x07080c, low ? 0.055 : 0.075);
-    this.playerSpot.intensity = state.isAiming ? 9 : 6.2;
-    this.playerSpot.angle = state.isAiming ? Math.PI / 7.5 : Math.PI / 5.5;
+    this.bloomPass.strength = high ? 0.72 : 0.48;
+    this.bloomPass.radius = high ? 0.7 : 0.5;
+    this.scene.fog = new THREE.FogExp2(0x0a0d14, low ? 0.026 : 0.038);
+    this.playerSpot.intensity = state.isAiming ? 13.5 : 10;
+    this.playerSpot.angle = state.isAiming ? Math.PI / 5.6 : Math.PI / 4.2;
   }
 
   private rebuildRoom(state: RenderState) {
@@ -281,6 +289,7 @@ export class GameRenderer3D {
     this.addScratchDecals(scratchDecals);
     this.addCeilingAndPipes(room.width, room.height);
     this.addEmergencyLights(room.width, room.height, state.gameTime);
+    this.addRoomFillLighting(room.width, room.height, room.ambientLight);
   }
 
   private addInstancedPlane(name: string, matrices: THREE.Matrix4[], material: THREE.Material, scale = 1) {
@@ -338,6 +347,9 @@ export class GameRenderer3D {
       [1.5, WALL_HEIGHT - 0.45, 1.2],
       [width - 1.5, WALL_HEIGHT - 0.45, height - 1.2],
       [width * 0.5, WALL_HEIGHT - 0.45, 1.2],
+      [width * 0.5, WALL_HEIGHT - 0.45, height - 1.2],
+      [1.5, WALL_HEIGHT - 0.45, height * 0.5],
+      [width - 1.5, WALL_HEIGHT - 0.45, height * 0.5],
     ];
 
     for (const [x, y, z] of positions) {
@@ -345,12 +357,24 @@ export class GameRenderer3D {
       housing.position.set(x, y, z);
       this.roomGroup.add(housing);
 
-      const flicker = 0.65 + Math.abs(Math.sin(gameTime * 5.1 + x)) * 0.45;
-      const point = new THREE.PointLight(0xff5b3a, flicker * 1.7, 5.2, 1.65);
+      const flicker = 0.8 + Math.abs(Math.sin(gameTime * 5.1 + x)) * 0.5;
+      const point = new THREE.PointLight(0xff6a42, flicker * 2.45, 6.8, 1.5);
       point.position.set(x, y - 0.05, z);
       point.castShadow = false;
       this.roomGroup.add(point);
     }
+  }
+
+  private addRoomFillLighting(width: number, height: number, ambientLight: number) {
+    const fill = new THREE.PointLight(0x8ea7d8, 1.35 + ambientLight * 2.5, Math.max(width, height) * 1.1, 1.3);
+    fill.position.set(width / 2, WALL_HEIGHT - 0.65, height / 2);
+    fill.castShadow = false;
+    this.roomGroup.add(fill);
+
+    const floorGlow = new THREE.PointLight(0x335c7d, 0.9, Math.max(width, height) * 0.8, 1.7);
+    floorGlow.position.set(width / 2, 0.45, height / 2);
+    floorGlow.castShadow = false;
+    this.roomGroup.add(floorGlow);
   }
 
   private buildPlayer() {
@@ -370,9 +394,20 @@ export class GameRenderer3D {
     this.playerGroup.add(shoulderLamp);
   }
 
+  private getVisualAnchor(state: RenderState): { x: number; z: number } {
+    const rawX = toSceneX(state.playerX);
+    const rawZ = toSceneZ(state.playerY);
+    const room = state.currentRoom;
+    if (!room) return { x: rawX, z: rawZ };
+
+    return {
+      x: clamp(rawX, 1.25, Math.max(1.25, room.width - 1.25)),
+      z: clamp(rawZ, 1.25, Math.max(1.25, room.height - 1.25)),
+    };
+  }
+
   private updatePlayer(state: RenderState) {
-    const x = toSceneX(state.playerX);
-    const z = toSceneZ(state.playerY);
+    const { x, z } = this.getVisualAnchor(state);
     const crouchDrop = state.isCrouching ? 0.34 : 0;
     this.playerGroup.position.set(x, -crouchDrop, z);
     this.playerGroup.rotation.y = -state.playerAngle + Math.PI / 2;
@@ -441,8 +476,7 @@ export class GameRenderer3D {
   }
 
   private updateCinematicCamera(state: RenderState) {
-    const playerX = toSceneX(state.playerX);
-    const playerZ = toSceneZ(state.playerY);
+    const { x: playerX, z: playerZ } = this.getVisualAnchor(state);
     const forward = new THREE.Vector3(Math.cos(state.playerAngle), 0, Math.sin(state.playerAngle));
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const aimTighten = state.isAiming ? 0.72 : 1;
@@ -451,11 +485,21 @@ export class GameRenderer3D {
       ? (Math.random() - 0.5) * state.cameraShake * 0.18
       : 0;
 
-    const desired = new THREE.Vector3(playerX, CAMERA_HEIGHT - crouchDrop + shake, playerZ)
+    let desired = new THREE.Vector3(playerX, CAMERA_HEIGHT - crouchDrop + shake, playerZ)
       .add(forward.clone().multiplyScalar(-CAMERA_DISTANCE * aimTighten))
       .add(right.clone().multiplyScalar(CAMERA_SHOULDER_OFFSET));
-    const target = new THREE.Vector3(playerX, 1.15 - crouchDrop, playerZ)
+    const target = new THREE.Vector3(playerX, 0.9 - crouchDrop, playerZ)
       .add(forward.clone().multiplyScalar(state.isAiming ? 2.2 : 1.25));
+
+    if (state.currentRoom) {
+      desired = new THREE.Vector3(
+        clamp(desired.x, 1.15, Math.max(1.15, state.currentRoom.width - 1.15)),
+        desired.y,
+        clamp(desired.z, 1.15, Math.max(1.15, state.currentRoom.height - 1.15))
+      );
+      target.x = clamp(target.x, 1.0, Math.max(1.0, state.currentRoom.width - 1.0));
+      target.z = clamp(target.z, 1.0, Math.max(1.0, state.currentRoom.height - 1.0));
+    }
 
     if (Number.isFinite(desired.x)) {
       const delta = desired.clone().sub(this.camera.position).multiplyScalar(0.13);
