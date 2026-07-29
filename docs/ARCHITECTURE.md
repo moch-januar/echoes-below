@@ -13,8 +13,8 @@
 │  GameEngine.ts                           │
 │  Game loop, world sim, collision, AI     │
 ├─────────────┬───────────────┬───────────┤
-│  Zustand    │  Renderer.ts  │  Input    │
-│  Stores     │  Canvas 2D    │  Manager  │
+│  Zustand    │  GameRenderer │  Input    │
+│  Stores     │  3D / 2D      │  Manager  │
 ├─────────────┴───────────────┴───────────┤
 │  Config: rooms, items, enemies, puzzles  │
 │  Saves: localStorage persistence         │
@@ -42,6 +42,21 @@ title → newGame → loading → playing ↔ pause
                               death → playing (reload save) / title
                               ending → title
 ```
+
+## Renderer Boundary
+
+`GameEngine.render()` builds a renderer-agnostic `RenderState`. The default renderer is now `GameRenderer3D.ts`, a Three.js/WebGL renderer that procedurally converts existing room tile maps into modular 3D environments. `Renderer.ts` remains available as a Canvas 2D fallback if WebGL initialization fails.
+
+The current 3D renderer provides:
+- PBR `MeshStandardMaterial` materials
+- ACES tone mapping and sRGB output
+- Exponential fog
+- Soft shadows
+- Dynamic player flashlight and muzzle flash lights
+- Flickering emergency lights
+- Instanced tile geometry
+- SSAO and bloom on medium/high quality
+- Over-the-shoulder third-person camera
 
 ## Room System
 
@@ -84,5 +99,7 @@ Weapons fire raycasts from player in aiming direction:
 
 - Fixed timestep with cap at 50ms to prevent spiral-of-death
 - Enemies only update in current room
-- Canvas 2D with dirty rectangles
-- Offscreen canvas for lighting layer
+- 3D rooms use instanced tile meshes to reduce draw calls
+- Low quality skips 3D post-processing
+- Legacy Canvas 2D renderer remains as a fallback
+- See `docs/MODERNIZATION_ROADMAP.md` for the 3D optimization plan

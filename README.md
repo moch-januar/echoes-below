@@ -1,6 +1,6 @@
 # ECHOES BELOW — A Survival-Horror Game
 
-An original browser-based survival-horror game built with React, TypeScript, and HTML5 Canvas 2D.
+An original browser-based survival-horror game built with React, TypeScript, and a modern Three.js/WebGL 3D renderer with a Canvas 2D fallback.
 
 **Playable chapter:** ~20 minutes of tense exploration, puzzles, combat, and narrative discovery.
 
@@ -58,7 +58,8 @@ As **Mara Vey**, a systems engineer, you must restore power, uncover what happen
 ## Tech Stack
 
 - **React 19** + **TypeScript** + **Vite**
-- **HTML5 Canvas 2D** for game rendering
+- **Three.js/WebGL** for modern 3D rendering, lighting, fog, bloom, and SSAO
+- **HTML5 Canvas 2D** fallback renderer for WebGL initialization failure
 - **Zustand** for state management
 - **localStorage** for save persistence
 
@@ -93,6 +94,10 @@ The production build produces a static site in `dist/`. Deploy to any static hos
 - **GitHub Pages**: Deploy `dist/` folder
 
 See `docs/DEPLOYMENT.md` for full details.
+
+## 3D Modernization
+
+The first 3D migration milestone is documented in `docs/MODERNIZATION_ROADMAP.md`. Current gameplay logic, story progression, puzzles, endings, inventory, and save format remain compatible with the original implementation while rendering now uses a procedural Three.js scene generated from the existing room data.
 
 ## Development
 

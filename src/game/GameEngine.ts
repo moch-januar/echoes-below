@@ -4,6 +4,7 @@
 import { InputManager } from './systems/InputManager';
 import { GameRenderer } from './systems/Renderer';
 import type { RenderState } from './systems/Renderer';
+import { GameRenderer3D } from './systems/GameRenderer3D';
 import { useGameStore } from './state/gameStore';
 import type { GameFlag } from './state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from './state/inventoryStore';
@@ -21,6 +22,12 @@ import { clamp, distance, angleBetween, isWalkableTile, isHazardTile, getTileSpe
 const TILE = 20;
 const PLAYER_RADIUS = 6;
 
+interface GameRenderBackend {
+  resize: (width: number, height: number) => void;
+  render: (state: RenderState) => void;
+  destroy?: () => void;
+}
+
 export interface InteractableObject {
   x: number;
   y: number;
@@ -33,7 +40,7 @@ export interface InteractableObject {
 
 export class GameEngine {
   private input: InputManager;
-  private renderer: GameRenderer;
+  private renderer: GameRenderBackend;
   private canvas: HTMLCanvasElement;
   private animationId: number = 0;
   private lastTime: number = 0;
@@ -74,7 +81,12 @@ export class GameEngine {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.input = new InputManager();
-    this.renderer = new GameRenderer(canvas);
+    try {
+      this.renderer = new GameRenderer3D(canvas);
+    } catch (error) {
+      console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
+      this.renderer = new GameRenderer(canvas);
+    }
     this.input.bind(canvas);
   }
 
@@ -316,6 +328,7 @@ export class GameEngine {
   destroy() {
     this.stop();
     this.input.unbind();
+    this.renderer.destroy?.();
   }
 
   private loop = (time: number) => {
