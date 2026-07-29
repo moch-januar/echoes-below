@@ -58,6 +58,12 @@ export class GameEngine {
   private hitEffects: Array<{ x: number; y: number; timer: number }> = [];
   private bulletTrails: Array<{ x1: number; y1: number; x2: number; y2: number; timer: number }> = [];
 
+  // Smooth physics
+  private playerVx: number = 0;
+  private playerVy: number = 0;
+  private footstepTimer: number = 0;
+  private bobPhase: number = 0;
+
   // Puzzle state
   private activePuzzle: string | null = null;
 
@@ -347,7 +353,7 @@ export class GameEngine {
     if (this.input.isActionActive('moveLeft')) moveX -= 1;
     if (this.input.isActionActive('moveRight')) moveX += 1;
 
-    // Normalize diagonal movement
+    // Normalize diagonal
     if (moveX !== 0 && moveY !== 0) {
       const len = Math.sqrt(moveX * moveX + moveY * moveY);
       moveX /= len;
@@ -356,9 +362,57 @@ export class GameEngine {
 
     const isRunning = this.input.isActionActive('run') && !store.player.isCrouching;
     const isCrouching = this.input.isActionActive('crouch');
-    const speed = isRunning ? 80 : isCrouching ? 25 : 50;
+    const targetSpeed = isRunning ? 80 : isCrouching ? 25 : 50;
 
-    // Mouse aiming (get world position)
+    // Smooth acceleration/deceleration
+    const accel = 120; // pixels/s²
+    const friction = 80;
+
+    if (moveX !== 0 || moveY !== 0) {
+      this.playerVx += moveX * accel * dt;
+      this.playerVy += moveY * accel * dt;
+
+      // Clamp to target speed
+      const currentSpeed = Math.sqrt(this.playerVx * this.playerVx + this.playerVy * this.playerVy);
+      if (currentSpeed > targetSpeed) {
+        this.playerVx = (this.playerVx / currentSpeed) * targetSpeed;
+        this.playerVy = (this.playerVy / currentSpeed) * targetSpeed;
+      }
+    } else {
+      // Apply friction
+      const currentSpeed = Math.sqrt(this.playerVx * this.playerVx + this.playerVy * this.playerVy);
+      if (currentSpeed > 0) {
+        const frictionForce = friction * dt;
+        if (frictionForce >= currentSpeed) {
+          this.playerVx = 0;
+          this.playerVy = 0;
+        } else {
+          this.playerVx *= (currentSpeed - frictionForce) / currentSpeed;
+          this.playerVy *= (currentSpeed - frictionForce) / currentSpeed;
+        }
+      }
+    }
+
+    // Movement speed for bob/animation
+    const currentMoveSpeed = Math.sqrt(this.playerVx * this.playerVx + this.playerVy * this.playerVy);
+
+    // Footstep timer
+    if (currentMoveSpeed > 5) {
+      const stepInterval = isRunning ? 0.3 : isCrouching ? 0.8 : 0.5;
+      this.footstepTimer += dt;
+      if (this.footstepTimer >= stepInterval) {
+        this.footstepTimer = 0;
+        this.playFootstep(room);
+      }
+    } else {
+      this.footstepTimer = 0;
+    }
+
+    // Bob phase
+    const bobRate = currentMoveSpeed > 5 ? (currentMoveSpeed / 60) : 0.5;
+    this.bobPhase += dt * bobRate * 6;
+
+    // Mouse aiming
     const mouseWorld = this.input.getWorldMousePosition(this.canvas.width, this.canvas.height);
     const angleToMouse = angleBetween(this.playerX, this.playerY, mouseWorld.x, mouseWorld.y);
 
@@ -376,63 +430,57 @@ export class GameEngine {
 
     // Update store
     useGameStore.getState().updatePlayer({
-      isRunning: isRunning && (moveX !== 0 || moveY !== 0),
+      isRunning: isRunning && currentMoveSpeed > 5,
       isCrouching,
       isAiming,
       angle: playerAngle,
+      moveSpeed: currentMoveSpeed,
+      bobPhase: this.bobPhase,
     });
 
-    // ── Collision ──────────────────────────────────────────────────────
-    if (moveX !== 0 || moveY !== 0) {
-      let newX = this.playerX + moveX * speed * dt;
-      let newY = this.playerY + moveY * speed * dt;
+    // ── Collision (with smooth response) ─────────────────────────────────
+    const newX = this.playerX + this.playerVx * dt;
+    const newY = this.playerY + this.playerVy * dt;
 
-      // Tile collision
-      const { tx: leftTx, ty: topTy } = worldToTile(newX - PLAYER_RADIUS, newY - PLAYER_RADIUS);
-      const { tx: rightTx, ty: bottomTy } = worldToTile(newX + PLAYER_RADIUS, newY + PLAYER_RADIUS);
+    // Tile collision
+    const { tx: leftTx, ty: topTy } = worldToTile(newX - PLAYER_RADIUS, newY - PLAYER_RADIUS);
+    const { tx: rightTx, ty: bottomTy } = worldToTile(newX + PLAYER_RADIUS, newY + PLAYER_RADIUS);
 
-      let canMoveX = true;
-      let canMoveY = true;
+    let blockedX = false;
+    let blockedY = false;
 
-      for (let ty = topTy; ty <= bottomTy; ty++) {
-        for (let tx = leftTx; tx <= rightTx; tx++) {
-          const tile = room.tiles[ty]?.[tx] ?? 0;
-          if (tile === 0 || tile === 2 || tile === 5) {
-            // Check if overlapping
-            const tileWorldX = tx * TILE;
-            const tileWorldY = ty * TILE;
-            if (newX + PLAYER_RADIUS > tileWorldX && newX - PLAYER_RADIUS < tileWorldX + TILE &&
-                newY + PLAYER_RADIUS > tileWorldY && newY - PLAYER_RADIUS < tileWorldY + TILE) {
-              if (tx >= leftTx && tx <= rightTx) canMoveX = false;
-              if (ty >= topTy && ty <= bottomTy) canMoveY = false;
-            }
-          }
-
-          // Hazard tiles
-          if (tile === 4) { // spores
-            // Take damage over time
-            if (Math.random() < 0.01) {
-              useGameStore.getState().damagePlayer(1);
-            }
-          }
-
-          if (tile === 3) { // water
-            // Slow (handled below)
+    for (let ty = topTy; ty <= bottomTy; ty++) {
+      for (let tx = leftTx; tx <= rightTx; tx++) {
+        const tile = room.tiles[ty]?.[tx] ?? 0;
+        if (tile === 0 || tile === 2 || tile === 5) {
+          const tileWorldX = tx * TILE;
+          const tileWorldY = ty * TILE;
+          if (newX + PLAYER_RADIUS > tileWorldX && newX - PLAYER_RADIUS < tileWorldX + TILE &&
+              newY + PLAYER_RADIUS > tileWorldY && newY - PLAYER_RADIUS < tileWorldY + TILE) {
+            if (tx >= leftTx && tx <= rightTx) blockedX = true;
+            if (ty >= topTy && ty <= bottomTy) blockedY = true;
           }
         }
-      }
 
-      // Apply movement with collision
-      if (canMoveX) this.playerX = newX;
-      if (canMoveY) this.playerY = newY;
-
-      // Tile speed modifier
-      const playerTile = room.tiles[Math.floor(this.playerY / TILE)]?.[Math.floor(this.playerX / TILE)] ?? 1;
-      const speedMod = getTileSpeedModifier(playerTile);
-      if (speedMod < 1) {
-        this.playerX += moveX * (speedMod - 1) * speed * dt * 0.5;
-        this.playerY += moveY * (speedMod - 1) * speed * dt * 0.5;
+        // Hazard tiles
+        if (tile === 4 && Math.random() < 0.01) {
+          useGameStore.getState().damagePlayer(1);
+        }
       }
+    }
+
+    // Apply movement with collision
+    if (!blockedX) this.playerX = newX;
+    else { this.playerVx = 0; }
+    if (!blockedY) this.playerY = newY;
+    else { this.playerVy = 0; }
+
+    // Tile speed modifier
+    const playerTile = room.tiles[Math.floor(this.playerY / TILE)]?.[Math.floor(this.playerX / TILE)] ?? 1;
+    const speedMod = getTileSpeedModifier(playerTile);
+    if (speedMod < 1 && currentMoveSpeed > 5) {
+      this.playerVx *= 0.95;
+      this.playerVy *= 0.95;
     }
 
     // Update store position
@@ -660,23 +708,41 @@ export class GameEngine {
   private fireWeapon(weapon: string) {
     const store = useGameStore.getState();
 
-    if (!store.consumeAmmo(weapon)) return;
+    if (!store.consumeAmmo(weapon)) {
+      // Click on empty
+      store.showSubtitle('*Click*', 0.3);
+      return;
+    }
 
     const cooldown = weapon === 'pistol' ? 0.35 : 1.0;
     this.shootCooldown = cooldown;
     this.muzzleFlashTimer = 0.1;
 
-    // Play sound (via subtitles for now)
-    const sound = weapon === 'pistol' ? 'BANG!' : 'FWOOSH!';
-    store.showSubtitle(sound, 0.3);
+    // Muzzle flash screen effect
+    store.setEffects({ muzzleFlash: 0.6 });
 
-    // Raycast from player in aiming direction
+    // Audio subtitle
+    store.showSubtitle(weapon === 'pistol' ? 'BANG!' : 'FWOOSH!', 0.3);
+
+    // Weapon recoil (push player back slightly)
+    const recoilForce = weapon === 'pistol' ? 30 : 50;
+    this.playerVx -= Math.cos(store.player.angle) * recoilForce;
+    this.playerVy -= Math.sin(store.player.angle) * recoilForce;
+
+    // Camera shake
+    store.triggerShake(weapon === 'pistol' ? 0.15 : 0.3);
+
+    // Raycast
     const angle = store.player.angle;
     const range = weapon === 'pistol' ? 200 : 250;
     const damage = weapon === 'pistol' ? 25 : 50;
 
-    const hitX = this.playerX + Math.cos(angle) * range;
-    const hitY = this.playerY + Math.sin(angle) * range;
+    // Add spread
+    const spread = (Math.random() - 0.5) * (weapon === 'pistol' ? 0.08 : 0.12);
+    const finalAngle = angle + spread;
+
+    const hitX = this.playerX + Math.cos(finalAngle) * range;
+    const hitY = this.playerY + Math.sin(finalAngle) * range;
 
     // Bullet trail
     this.bulletTrails.push({
@@ -684,8 +750,26 @@ export class GameEngine {
       y1: this.playerY - 4,
       x2: hitX,
       y2: hitY,
-      timer: 0.1,
+      timer: 0.12,
     });
+
+    // Spawn muzzle flash particles
+    const flashPos = {
+      x: this.playerX + Math.cos(finalAngle) * 15,
+      y: this.playerY + Math.sin(finalAngle) * 15 - 4,
+    };
+    store.addParticles(Array.from({ length: 3 }, () => ({
+      x: flashPos.x,
+      y: flashPos.y,
+      vx: Math.cos(finalAngle + (Math.random() - 0.5)) * (30 + Math.random() * 30),
+      vy: Math.sin(finalAngle + (Math.random() - 0.5)) * (30 + Math.random() * 30),
+      life: 0.15,
+      maxLife: 0.15,
+      size: 2,
+      color: 'rgba(255,200,100,',
+      alpha: 0.8,
+      type: 'spark' as const,
+    })));
 
     // Check enemy hits
     for (const enemy of this.enemies) {
@@ -694,15 +778,31 @@ export class GameEngine {
       const distToLine = this.pointToLineDistance(enemy.x, enemy.y, this.playerX, this.playerY, hitX, hitY);
       const distToPlayer = distance(this.playerX, this.playerY, enemy.x, enemy.y);
 
-      if (distToLine < 10 && distToPlayer < range + 20) {
+      if (distToLine < 12 && distToPlayer < range + 20) {
         // Hit!
+        const wasAlive = !enemy.dead;
         enemy.health -= damage;
-        enemy.staggerTimer = 0.3;
+        enemy.staggerTimer = 0.4;
         enemy.state = 'stagger';
 
         this.hitEffects.push({ x: enemy.x, y: enemy.y, timer: 0.3 });
 
-        if (enemy.health <= 0) {
+        // Blood particles
+        const bloodAngle = angleBetween(this.playerX, this.playerY, enemy.x, enemy.y);
+        store.addParticles(Array.from({ length: 6 }, () => ({
+          x: enemy.x,
+          y: enemy.y,
+          vx: Math.cos(bloodAngle + (Math.random() - 0.5) * 1.5) * (30 + Math.random() * 60),
+          vy: Math.sin(bloodAngle + (Math.random() - 0.5) * 1.5) * (30 + Math.random() * 60) - 20,
+          life: 0.5 + Math.random() * 0.5,
+          maxLife: 1.0,
+          size: 2 + Math.random() * 3,
+          color: 'rgba(120,20,10,',
+          alpha: 0.8,
+          type: 'blood' as const,
+        })));
+
+        if (enemy.health <= 0 && wasAlive) {
           enemy.dead = true;
           enemy.state = 'dead';
           const template = ENEMY_TEMPLATES[enemy.templateId];
@@ -714,9 +814,16 @@ export class GameEngine {
           }
         }
 
-        break; // Only hit one enemy per shot
+        break;
       }
     }
+  }
+
+  /** Play footstep sound based on floor material */
+  private playFootstep(room: RoomDef) {
+    const tile = room.tiles[Math.floor(this.playerY / TILE)]?.[Math.floor(this.playerX / TILE)] ?? 1;
+    const mat = tile === 3 ? 'water' : tile === 6 ? 'carpet' : tile === 7 ? 'metal' : 'concrete';
+    useGameStore.getState().setEffects({ floorMaterial: mat as any });
   }
 
   private pointToLineDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -1116,6 +1223,8 @@ export class GameEngine {
       screenWidth: this.canvas.width,
       screenHeight: this.canvas.height,
       gameTime: store.gameTime,
+      playerMoveSpeed: store.player.moveSpeed,
+      bobPhase: store.player.bobPhase,
     };
 
     this.renderer.render(renderState);
