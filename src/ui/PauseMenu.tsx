@@ -15,7 +15,7 @@ export default function PauseMenu({ onQuit }: PauseMenuProps) {
     setScreen('playing');
     // Lock pointer back
     const canvas = document.querySelector('canvas');
-    if (canvas) canvas.requestPointerLock();
+    if (canvas && window.matchMedia('(pointer: fine)').matches) canvas.requestPointerLock();
   };
 
   const handleSave = () => {

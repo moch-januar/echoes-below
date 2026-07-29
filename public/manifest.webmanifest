@@ -1,0 +1,20 @@
+{
+  "name": "ECHOES BELOW",
+  "short_name": "Echoes",
+  "description": "A cinematic browser survival-horror game set beneath a biomedical research station.",
+  "start_url": "/echoes-below/",
+  "scope": "/echoes-below/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#050509",
+  "theme_color": "#0a0d12",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "icons/echoes-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

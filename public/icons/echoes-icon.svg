@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Echoes Below icon">
+  <rect width="512" height="512" rx="112" fill="#050509"/>
+  <radialGradient id="g" cx="50%" cy="45%" r="62%">
+    <stop offset="0" stop-color="#8fae8f" stop-opacity="0.92"/>
+    <stop offset="0.42" stop-color="#2c4b4c" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#050509" stop-opacity="0"/>
+  </radialGradient>
+  <circle cx="256" cy="226" r="188" fill="url(#g)"/>
+  <path d="M128 166h256v42H128zm28 76h200v34H156zm38 70h124v30H194z" fill="#c6d2b7" opacity="0.9"/>
+  <path d="M146 390c42-48 73-72 110-72s68 24 110 72" fill="none" stroke="#748c77" stroke-width="22" stroke-linecap="round"/>
+  <path d="M96 96l320 320" stroke="#151a20" stroke-width="28" stroke-linecap="round" opacity="0.55"/>
+</svg>

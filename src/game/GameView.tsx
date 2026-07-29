@@ -13,7 +13,7 @@ export default function GameView({ engineRef, inputRef, onReady }: GameViewProps
 
   const handleCanvasClick = useCallback(() => {
     // Lock pointer on click for mouse look
-    if (canvasRef.current && canvasRef.current !== document.pointerLockElement) {
+    if (canvasRef.current && canvasRef.current !== document.pointerLockElement && window.matchMedia('(pointer: fine)').matches) {
       canvasRef.current.requestPointerLock();
     }
   }, []);
@@ -49,6 +49,7 @@ export default function GameView({ engineRef, inputRef, onReady }: GameViewProps
         height: '100vh',
         cursor: 'crosshair',
         background: '#000',
+        touchAction: 'none',
       }}
     />
   );

@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { useGameStore } from '../game/state/gameStore';
+import type { Screen } from '../game/state/gameStore';
 import { SaveManager } from '../game/saves/SaveManager';
-import type { SaveData } from '../game/saves/SaveManager';
 import { formatTime } from '../utils/helpers';
 
 interface SaveLoadScreenProps {
   onLoadSave: (slot: number) => void;
   onSave: (slot: number) => void;
   currentRoomId: string;
-  fromPause?: boolean;
+  gameReady: boolean;
+  returnScreen: Screen;
 }
 
-export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, fromPause }: SaveLoadScreenProps) {
+export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, gameReady, returnScreen }: SaveLoadScreenProps) {
   const screen = useGameStore((s) => s.screen);
   const setScreen = useGameStore((s) => s.setScreen);
-  const flags = useGameStore((s) => s.flags);
   const [message, setMessage] = useState<string | null>(null);
 
   if (screen !== 'saveLoad') return null;
@@ -22,10 +22,11 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, from
   const allSaves = SaveManager.getAllSaves();
   const slots = [0, 1, 2];
 
-  const isSafeRoom = fromPause || ROOM_IS_SAFE[currentRoomId];
+  const isSafeRoom = ROOM_IS_SAFE[currentRoomId] === true;
+  const canSave = gameReady && isSafeRoom;
 
   const handleSave = (slot: number) => {
-    if (!isSafeRoom && !fromPause) {
+    if (!canSave) {
       setMessage('You can only save in safe rooms. Find the save terminal.');
       setTimeout(() => setMessage(null), 2000);
       return;
@@ -45,7 +46,7 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, from
     const data = allSaves[slot];
     if (!data) return;
 
-    if (fromPause && !window.confirm('Load game? Unsaved progress will be lost.')) return;
+    if (gameReady && !window.confirm('Load game? Unsaved progress will be lost.')) return;
 
     onLoadSave(slot);
     setScreen('loading');
@@ -61,13 +62,17 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, from
   };
 
   const handleClose = () => {
-    setScreen(fromPause ? 'pause' : 'playing');
+    setScreen(returnScreen);
   };
 
   return (
     <div className="screen save-load-screen screen-overlay">
       <div className="save-load-content">
-        <h2>{fromPause ? 'SAVE / LOAD GAME' : 'LOAD GAME'}</h2>
+        <h2>{gameReady ? 'SAVE / LOAD GAME' : 'LOAD GAME'}</h2>
+
+        {gameReady && !isSafeRoom && (
+          <p className="save-message warning">Manual saving is available only at safe-room terminals.</p>
+        )}
 
         {message && <p className="save-message">{message}</p>}
 
@@ -91,7 +96,7 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, from
                     <p>Location: {data.currentRoom}</p>
                     <p>Objective: {data.objective}</p>
                     <div className="save-slot-actions">
-                      {fromPause && (
+                      {gameReady && (
                         <button className="btn-action" onClick={() => handleSave(slot)}>
                           Overwrite
                         </button>
@@ -107,11 +112,11 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, from
                 ) : (
                   <div className="save-slot-empty">
                     <p>Empty slot</p>
-                    {fromPause && (
+                    {gameReady && (
                       <button
                         className="btn-action"
                         onClick={() => handleSave(slot)}
-                        disabled={!isSafeRoom}
+                        disabled={!canSave}
                         title={!isSafeRoom ? 'Must be in safe room' : ''}
                       >
                         Save Here

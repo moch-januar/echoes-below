@@ -27,6 +27,18 @@ export class InputManager {
   private cameraX: number = 0;
   private cameraY: number = 0;
   private sensitivity: number = 1.0;
+  private virtualActions: Map<string, boolean> = new Map();
+  private virtualMouseButtons: Set<number> = new Set();
+  private virtualMoveX: number = 0;
+  private virtualMoveY: number = 0;
+  private gamepadActions: Map<string, boolean> = new Map();
+  private gamepadMouseButtons: Set<number> = new Set();
+  private gamepadMoveX: number = 0;
+  private gamepadMoveY: number = 0;
+  private gamepadAimX: number = 0;
+  private gamepadAimY: number = 0;
+  private gamepadDeadZone: number = 0.18;
+  private activeInputMethod: 'keyboardMouse' | 'touch' | 'gamepad' = 'keyboardMouse';
 
   private actionMap: Record<string, string[]> = {
     moveUp: ['KeyW', 'ArrowUp'],
@@ -67,6 +79,7 @@ export class InputManager {
     this.canvas = canvas;
 
     this.keyDownHandler = (e: KeyboardEvent) => {
+      this.activeInputMethod = 'keyboardMouse';
       const key = e.code;
       const state = this.keys.get(key) || { pressed: false, justPressed: false, justReleased: false };
       this.keys.set(key, { pressed: true, justPressed: !state.pressed, justReleased: false });
@@ -84,6 +97,7 @@ export class InputManager {
     };
 
     this.mouseDownHandler = (e: MouseEvent) => {
+      this.activeInputMethod = 'keyboardMouse';
       this.mouseButtons.add(e.button);
     };
 
@@ -96,6 +110,7 @@ export class InputManager {
     };
 
     this.mouseMoveHandler = (e: MouseEvent) => {
+      this.activeInputMethod = 'keyboardMouse';
       if (this.isPointerLocked) {
         this.mouseX += e.movementX * this.sensitivity;
         this.mouseY += e.movementY * this.sensitivity;
@@ -148,6 +163,8 @@ export class InputManager {
   }
 
   update() {
+    this.pollGamepad();
+
     // Copy current states to prev
     for (const [key, state] of this.keys) {
       this.prevKeys.add(key);
@@ -161,13 +178,81 @@ export class InputManager {
     for (const btn of this.mouseButtons) {
       this.prevMouseButtons.add(btn);
     }
+    for (const btn of this.virtualMouseButtons) {
+      this.prevMouseButtons.add(btn);
+    }
+    for (const btn of this.gamepadMouseButtons) {
+      this.prevMouseButtons.add(btn);
+    }
 
     // Update action states
     for (const [action, keys] of Object.entries(this.actionMap)) {
-      const pressed = keys.some((k) => this.keys.get(k)?.pressed);
+      const pressed = keys.some((k) => this.keys.get(k)?.pressed) || this.virtualActions.get(action) === true || this.gamepadActions.get(action) === true;
       this.prevActionStates.set(action, this.actionStates.get(action) || false);
       this.actionStates.set(action, pressed);
     }
+  }
+
+  private pollGamepad() {
+    this.gamepadActions.clear();
+    this.gamepadMouseButtons.clear();
+    this.gamepadMoveX = 0;
+    this.gamepadMoveY = 0;
+    this.gamepadAimX = 0;
+    this.gamepadAimY = 0;
+    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
+    const pad = Array.from(pads).find(Boolean);
+    if (!pad) return;
+
+    const dead = this.gamepadDeadZone;
+    const axis = (value: number | undefined) => Math.abs(value ?? 0) > dead ? value ?? 0 : 0;
+    this.gamepadMoveX = axis(pad.axes[0]);
+    this.gamepadMoveY = axis(pad.axes[1]);
+    this.gamepadAimX = axis(pad.axes[2]);
+    this.gamepadAimY = axis(pad.axes[3]);
+
+    const button = (index: number) => pad.buttons[index]?.pressed === true;
+    this.gamepadActions.set('interact', button(0));
+    this.gamepadActions.set('crouch', button(1));
+    this.gamepadActions.set('reload', button(2));
+    this.gamepadActions.set('heal', button(3));
+    this.gamepadActions.set('inventory', button(8));
+    this.gamepadActions.set('pause', button(9));
+    this.gamepadActions.set('map', button(10));
+    this.gamepadActions.set('run', button(6) || button(11));
+    if (button(4)) this.gamepadMouseButtons.add(2);
+    if (button(5) || button(7)) this.gamepadMouseButtons.add(0);
+
+    if (Math.abs(this.gamepadAimX) > 0 || Math.abs(this.gamepadAimY) > 0) {
+      this.mouseX += this.gamepadAimX * 12 * this.sensitivity;
+      this.mouseY += this.gamepadAimY * 12 * this.sensitivity;
+    }
+
+    if (Math.abs(this.gamepadMoveX) > 0 || Math.abs(this.gamepadMoveY) > 0 || this.gamepadMouseButtons.size > 0 || Array.from(this.gamepadActions.values()).some(Boolean)) {
+      this.activeInputMethod = 'gamepad';
+    }
+  }
+
+  getMovementVector(): { x: number; y: number } {
+    if (Math.abs(this.virtualMoveX) > 0.03 || Math.abs(this.virtualMoveY) > 0.03) {
+      return { x: this.virtualMoveX, y: this.virtualMoveY };
+    }
+    if (Math.abs(this.gamepadMoveX) > 0.03 || Math.abs(this.gamepadMoveY) > 0.03) {
+      return { x: this.gamepadMoveX, y: this.gamepadMoveY };
+    }
+
+    let x = 0;
+    let y = 0;
+    if (this.isActionActive('moveUp')) y -= 1;
+    if (this.isActionActive('moveDown')) y += 1;
+    if (this.isActionActive('moveLeft')) x -= 1;
+    if (this.isActionActive('moveRight')) x += 1;
+    if (x !== 0 || y !== 0) {
+      const len = Math.hypot(x, y);
+      x /= len;
+      y /= len;
+    }
+    return { x, y };
   }
 
   isKeyDown(code: string): boolean {
@@ -195,11 +280,11 @@ export class InputManager {
   }
 
   isMouseButtonDown(button: number): boolean {
-    return this.mouseButtons.has(button);
+    return this.mouseButtons.has(button) || this.virtualMouseButtons.has(button) || this.gamepadMouseButtons.has(button);
   }
 
   isMouseJustPressed(button: number): boolean {
-    return this.mouseButtons.has(button) && !this.prevMouseButtons.has(button);
+    return (this.mouseButtons.has(button) || this.virtualMouseButtons.has(button) || this.gamepadMouseButtons.has(button)) && !this.prevMouseButtons.has(button);
   }
 
   getMousePosition(): { x: number; y: number } {
@@ -229,6 +314,50 @@ export class InputManager {
 
   setSensitivity(s: number) {
     this.sensitivity = s;
+  }
+
+  setGamepadDeadZone(deadZone: number) {
+    this.gamepadDeadZone = Math.max(0.01, Math.min(0.6, deadZone));
+  }
+
+  setVirtualAction(action: string, active: boolean) {
+    this.activeInputMethod = 'touch';
+    this.virtualActions.set(action, active);
+  }
+
+  setVirtualMouseButton(button: number, active: boolean) {
+    this.activeInputMethod = 'touch';
+    if (active) this.virtualMouseButtons.add(button);
+    else this.virtualMouseButtons.delete(button);
+  }
+
+  setVirtualMovement(x: number, y: number) {
+    this.activeInputMethod = 'touch';
+    const mag = Math.hypot(x, y);
+    if (mag > 1) {
+      this.virtualMoveX = x / mag;
+      this.virtualMoveY = y / mag;
+    } else {
+      this.virtualMoveX = x;
+      this.virtualMoveY = y;
+    }
+  }
+
+  addVirtualAimDelta(dx: number, dy: number) {
+    this.activeInputMethod = 'touch';
+    this.mouseX += dx * this.sensitivity;
+    this.mouseY += dy * this.sensitivity;
+  }
+
+  clearVirtualInputs() {
+    this.virtualActions.clear();
+    this.virtualMouseButtons.clear();
+    this.virtualMoveX = 0;
+    this.virtualMoveY = 0;
+  }
+
+  getActiveInputMethod(): 'keyboardMouse' | 'touch' | 'gamepad' {
+    return this.activeInputMethod;
   }
 
   resetFrame() {

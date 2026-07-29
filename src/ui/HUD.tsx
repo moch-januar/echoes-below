@@ -5,81 +5,98 @@ export default function HUD() {
   const player = useGameStore((s) => s.player);
   const screen = useGameStore((s) => s.screen);
   const ammo = useGameStore((s) => s.ammo);
+  const reserveAmmo = useGameStore((s) => s.reserveAmmo);
   const interactionPrompt = useGameStore((s) => s.interactionPrompt);
   const subtitleText = useGameStore((s) => s.subtitleText);
   const currentObjective = useGameStore((s) => s.currentObjective);
-  const currentDocument = useGameStore((s) => s.currentDocument);
+  const settings = useGameStore((s) => s.settings);
 
   const equippedWeapon = useInventoryStore((s) => s.equippedWeapon);
-  const equippedItem = equippedWeapon ? useInventoryStore((s) => s.getItem(equippedWeapon)) : null;
+  const items = useInventoryStore((s) => s.items);
+  const equippedItem = equippedWeapon ? items.find((item) => item.id === equippedWeapon) : null;
+  const quickItems = items.slice(0, 4);
 
   if (screen !== 'playing') return null;
 
   const healthPercent = (player.health / player.maxHealth) * 100;
-  const healthColor = healthPercent > 50 ? '#4a4' : healthPercent > 25 ? '#aa4' : '#a44';
+  const healthStateClass = healthPercent > 50 ? 'fine' : healthPercent > 25 ? 'injured' : 'critical';
+  const weaponType = equippedItem?.templateId === 'flaregun' ? 'flaregun' : 'pistol';
+  const weaponTemplate = equippedItem ? ITEM_TEMPLATES[equippedItem.templateId] : null;
+  const subtitleClass = `subtitle-${settings.subtitleSize}`;
 
   return (
-    <div className="hud">
-      {/* Health */}
-      <div className="hud-health">
+    <div className={`hud hud-modern ${settings.hudAutoHide ? 'auto-hide' : ''} ${settings.immersiveHud ? 'immersive' : ''}`}>
+      <section className={`hud-panel hud-vitals ${healthStateClass}`} aria-label="Player status">
+        <div className="hud-panel-label">MARA VEY</div>
+        <div className="hud-health-row">
+          <span className="hud-status-text">{player.healthState.toUpperCase()}</span>
+          <span className="hud-health-number">{Math.round(player.health)} / {player.maxHealth}</span>
+        </div>
         <div className="hud-health-bar">
-          <div
-            className="hud-health-fill"
-            style={{
-              width: `${healthPercent}%`,
-              background: healthColor,
-            }}
-          />
+          <div className="hud-health-fill" style={{ width: `${healthPercent}%` }} />
         </div>
-        <span className="hud-health-text" style={{ color: healthColor }}>
-          {player.healthState.toUpperCase()}
-        </span>
-      </div>
-
-      {/* Ammo */}
-      {equippedItem && (
-        <div className="hud-ammo">
-          <span className="hud-ammo-count">
-            {equippedItem.templateId === 'pistol' ? ammo.pistol : ammo.flaregun}
-          </span>
-          <span className="hud-ammo-max">
-            /{equippedItem.templateId === 'pistol' ? '12' : '1'}
-          </span>
-          <span className="hud-ammo-icon">
-            {ITEM_TEMPLATES[equippedItem.templateId]?.icon}
-          </span>
+        <div className="hud-condition-row">
+          <span>Infection {Math.round(player.infected)}%</span>
+          <span>{player.isCrouching ? 'Crouched' : player.isRunning ? 'Sprinting' : 'Steady'}</span>
         </div>
-      )}
+      </section>
 
-      {/* Interaction Prompt */}
+      <section className="hud-panel hud-weapon" aria-label="Equipped weapon">
+        <div className="hud-panel-label">WEAPON</div>
+        {equippedItem && weaponTemplate ? (
+          <>
+            <div className="hud-weapon-main">
+              <span className="hud-weapon-icon">{weaponTemplate.icon}</span>
+              <span className="hud-weapon-name">{weaponTemplate.name}</span>
+            </div>
+            <div className="hud-ammo-readout">
+              <span className="hud-ammo-count">{ammo[weaponType] ?? 0}</span>
+              <span className="hud-ammo-max">/ {weaponType === 'pistol' ? 12 : 1}</span>
+              <span className="hud-ammo-reserve">Reserve {reserveAmmo[weaponType] ?? 0}</span>
+            </div>
+          </>
+        ) : (
+          <div className="hud-weapon-empty">No weapon equipped</div>
+        )}
+      </section>
+
+      <section className="hud-panel hud-objective" aria-label="Current objective">
+        <div className="hud-panel-label">OBJECTIVE</div>
+        <p>{currentObjective}</p>
+      </section>
+
+      <section className="hud-quickslots" aria-label="Inventory shortcuts">
+        {quickItems.map((item, index) => {
+          const template = ITEM_TEMPLATES[item.templateId];
+          return (
+            <div key={item.id} className={`hud-quickslot ${equippedWeapon === item.id ? 'equipped' : ''}`}>
+              <span className="quickslot-key">{index + 1}</span>
+              <span className="quickslot-icon">{template?.icon ?? '?'}</span>
+              {item.quantity > 1 && <span className="quickslot-count">{item.quantity}</span>}
+            </div>
+          );
+        })}
+      </section>
+
       {interactionPrompt && (
-        <div className="hud-interaction">
-          {interactionPrompt}
+        <div className="hud-interaction modern-prompt">
+          <span className="prompt-key">E</span>
+          <span>{interactionPrompt.replace(/^\[E\]\s*/, '')}</span>
         </div>
       )}
 
-      {/* Subtitles */}
-      {subtitleText && (
-        <div className="hud-subtitle">
-          {subtitleText}
-        </div>
+      {subtitleText && settings.subtitlesEnabled && (
+        <div className={`hud-subtitle ${subtitleClass}`}>{subtitleText}</div>
       )}
 
-      {/* Objective */}
-      <div className="hud-objective">
-        {currentObjective}
-      </div>
-
-      {/* Crosshair */}
       <div className="hud-crosshair">
         <div className="crosshair-h" />
         <div className="crosshair-v" />
         <div className="crosshair-dot" />
       </div>
 
-      {/* Controls hint */}
-      <div className="hud-hints">
-        WASD: Move | Shift: Run | Ctrl: Crouch | E: Interact | R: Reload
+      <div className="hud-hints input-hints">
+        WASD Move · Mouse Aim · E Interact · Tab Inventory · M Map · Esc Pause
       </div>
     </div>
   );

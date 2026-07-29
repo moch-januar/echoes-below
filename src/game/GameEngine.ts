@@ -357,20 +357,12 @@ export class GameEngine {
     if (!room) return;
 
     // ── Player Movement ─────────────────────────────────────────────────
-    let moveX = 0;
-    let moveY = 0;
+    const movement = this.input.getMovementVector();
+    const moveX = movement.x;
+    const moveY = movement.y;
 
-    if (this.input.isActionActive('moveUp')) moveY -= 1;
-    if (this.input.isActionActive('moveDown')) moveY += 1;
-    if (this.input.isActionActive('moveLeft')) moveX -= 1;
-    if (this.input.isActionActive('moveRight')) moveX += 1;
-
-    // Normalize diagonal
-    if (moveX !== 0 && moveY !== 0) {
-      const len = Math.sqrt(moveX * moveX + moveY * moveY);
-      moveX /= len;
-      moveY /= len;
-    }
+    this.input.setSensitivity(store.settings.mouseSensitivity);
+    this.input.setGamepadDeadZone(store.settings.gamepadDeadZone);
 
     const isRunning = this.input.isActionActive('run') && !store.player.isCrouching;
     const isCrouching = this.input.isActionActive('crouch');

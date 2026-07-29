@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useGameStore } from '../game/state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from '../game/state/inventoryStore';
 
@@ -20,10 +20,19 @@ export default function InventoryScreen() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [combineMode, setCombineMode] = useState(false);
   const [activeTab, setActiveTab] = useState<'inventory' | 'storage'>('inventory');
-
-  if (screen !== 'inventory') return null;
+  const [filter, setFilter] = useState<'all' | 'weapons' | 'healing' | 'key'>('all');
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
 
   const currentItems = activeTab === 'inventory' ? items : storageItems;
+  const visibleItemIds = useMemo(() => {
+    return new Set(currentItems.filter((item) => {
+      const template = ITEM_TEMPLATES[item.templateId];
+      if (filter === 'weapons') return template?.isWeapon;
+      if (filter === 'healing') return template?.isHealing;
+      if (filter === 'key') return template?.isKeyItem;
+      return true;
+    }).map((item) => item.id));
+  }, [currentItems, filter]);
   const currentTransfer = activeTab === 'inventory' ? transferToStorage : transferFromStorage;
   const transferLabel = activeTab === 'inventory' ? 'Store' : 'Take';
 
@@ -71,6 +80,20 @@ export default function InventoryScreen() {
     setScreen('playing');
   };
 
+  const handleRotateSelected = () => {
+    if (!selectedItem || activeTab !== 'inventory') return;
+    moveItem(selectedItem.id, selectedItem.gridX, selectedItem.gridY, !selectedItem.rotated);
+  };
+
+  const handleDropOnCell = (gridX: number, gridY: number) => {
+    if (!draggingItemId || activeTab !== 'inventory') return;
+    const item = items.find((it) => it.id === draggingItemId);
+    if (item) moveItem(item.id, gridX, gridY, item.rotated);
+    setDraggingItemId(null);
+  };
+
+  if (screen !== 'inventory') return null;
+
   return (
     <div className="screen inventory-screen screen-overlay">
       <div className="inventory-header">
@@ -94,6 +117,17 @@ export default function InventoryScreen() {
         </button>
       </div>
 
+      <div className="inventory-tools">
+        {(['all', 'weapons', 'healing', 'key'] as const).map((f) => (
+          <button key={f} className={`tab-btn compact ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+            {f === 'key' ? 'Key Items' : f}
+          </button>
+        ))}
+        <button className="tab-btn compact" onClick={handleRotateSelected} disabled={!selectedItem || activeTab !== 'inventory'}>
+          Rotate
+        </button>
+      </div>
+
       {/* Grid */}
       <div className="inventory-grid-container">
         <div className="inventory-grid">
@@ -102,6 +136,7 @@ export default function InventoryScreen() {
             const gridX = i % 8;
             const item = currentItems.find(
               (it) =>
+                visibleItemIds.has(it.id) &&
                 gridX >= it.gridX &&
                 gridX < it.gridX + (it.rotated ? it.height : it.width) &&
                 gridY >= it.gridY &&
@@ -131,6 +166,9 @@ export default function InventoryScreen() {
                       setSelectedItemId(item.id === selectedItemId ? null : item.id);
                     }
                   }}
+                  draggable={activeTab === 'inventory'}
+                  onDragStart={() => setDraggingItemId(item.id)}
+                  onDragEnd={() => setDraggingItemId(null)}
                 >
                   <span className="item-icon">{template?.icon || '?'}</span>
                   <span className="item-name">{template?.name || item.templateId}</span>
@@ -142,7 +180,13 @@ export default function InventoryScreen() {
             }
 
             return (
-              <div key={i} className="grid-cell" style={{ gridColumn: gridX + 1, gridRow: gridY + 1 }} />
+              <div
+                key={i}
+                className={`grid-cell ${draggingItemId ? 'drop-target' : ''}`}
+                style={{ gridColumn: gridX + 1, gridRow: gridY + 1 }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => handleDropOnCell(gridX, gridY)}
+              />
             );
           })}
         </div>

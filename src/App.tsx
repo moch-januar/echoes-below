@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import type { CSSProperties } from 'react';
 import { useGameStore } from './game/state/gameStore';
-import { useInventoryStore } from './game/state/inventoryStore';
+import type { Screen } from './game/state/gameStore';
 import { GameEngine } from './game/GameEngine';
 import { InputManager } from './game/systems/InputManager';
 import { SaveManager } from './game/saves/SaveManager';
-import type { SaveData } from './game/saves/SaveManager';
 
 import GameView from './game/GameView';
 import MainMenu from './ui/MainMenu';
@@ -19,13 +19,18 @@ import SettingsScreen from './ui/SettingsScreen';
 import ControlsScreen from './ui/ControlsScreen';
 import DeathScreen from './ui/DeathScreen';
 import EndingScreen from './ui/EndingScreen';
+import TouchControls from './ui/TouchControls';
+import { usePlatformProfile } from './ui/usePlatformProfile';
 
 import './styles.css';
 
 export default function App() {
   const screen = useGameStore((s) => s.screen);
+  const prevScreen = useGameStore((s) => s.prevScreen);
   const setScreen = useGameStore((s) => s.setScreen);
   const resetGame = useGameStore((s) => s.resetGame);
+  const settings = useGameStore((s) => s.settings);
+  const platform = usePlatformProfile();
 
   const engineRef = useRef<GameEngine | null>(null);
   const inputRef = useRef<InputManager | null>(null);
@@ -40,7 +45,7 @@ export default function App() {
     // Lock pointer
     setTimeout(() => {
       const canvas = document.querySelector('canvas');
-      if (canvas) canvas.requestPointerLock();
+      if (canvas && window.matchMedia('(pointer: fine)').matches) canvas.requestPointerLock();
     }, 200);
   }, [setScreen]);
 
@@ -66,6 +71,19 @@ export default function App() {
     setLoadingSave(slot);
     setScreen('loading');
   }, []);
+
+  useEffect(() => {
+    if (loadingSave === null || !engineRef.current) return;
+    const data = SaveManager.load(loadingSave);
+    if (data) {
+      engineRef.current.init(data);
+      setGameReady(true);
+      setScreen('playing');
+    } else {
+      setScreen(gameReady ? 'pause' : 'title');
+    }
+    setLoadingSave(null);
+  }, [gameReady, loadingSave, setScreen]);
 
   // ── Quit to menu ─────────────────────────────────────────────────────────
   const handleQuit = useCallback(() => {
@@ -105,11 +123,16 @@ export default function App() {
   }, [screen]);
 
   return (
-    <div className="app">
+    <div
+      className={`app ${platform.safeAreaClass} ${platform.isTouchPreferred ? 'input-touch' : 'input-desktop'} ${settings.highContrast ? 'access-high-contrast' : ''} ${settings.reducedMotion ? 'access-reduced-motion' : ''} colorblind-${settings.colorBlindMode}`}
+      style={{ '--hud-scale': settings.hudScale } as CSSProperties}
+    >
       {/* Game Canvas — always mounted when playing/loading */}
-      {(screen === 'playing' || screen === 'loading' || screen === 'pause' ||
-        screen === 'inventory' || screen === 'map' || screen === 'document' ||
-        screen === 'saveLoad' || screen === 'death' || screen === 'ending') && (
+      {(screen === 'loading' || (gameReady && (
+        screen === 'playing' || screen === 'pause' || screen === 'inventory' ||
+        screen === 'map' || screen === 'document' || screen === 'saveLoad' ||
+        screen === 'death' || screen === 'ending'
+      ))) && (
         <div className="game-layer">
           <GameView
             engineRef={engineRef}
@@ -168,28 +191,25 @@ export default function App() {
         <>
           {screen === 'playing' && <HUD />}
           {screen === 'pause' && <HUD />}
+          <TouchControls inputRef={inputRef} platform={platform} />
           <PauseMenu onQuit={handleQuit} />
           <InventoryScreen />
           <MapScreen currentRoomId={currentRoomId} />
           <DocumentViewer />
-          <SaveLoadScreen
-            onLoadSave={handleLoadSave}
-            onSave={handleSave}
-            currentRoomId={currentRoomId}
-            fromPause={screen === 'pause' || screen === 'saveLoad'}
-          />
           <DeathScreen />
           <EndingScreen />
         </>
       )}
 
-      {/* Settings & Controls (available from menus before game starts) */}
-      {!gameReady && (
-        <>
-          <SettingsScreen />
-          <ControlsScreen />
-        </>
-      )}
+      <SaveLoadScreen
+        onLoadSave={handleLoadSave}
+        onSave={handleSave}
+        currentRoomId={currentRoomId}
+        gameReady={gameReady}
+        returnScreen={(prevScreen === 'pause' ? 'pause' : gameReady ? 'playing' : 'title') as Screen}
+      />
+      <SettingsScreen />
+      <ControlsScreen />
     </div>
   );
 }

@@ -145,6 +145,18 @@ export interface GameSettings {
   holdSprint: boolean;
   qualityPreset: 'low' | 'medium' | 'high';
   rendererMode: RendererMode;
+  hudScale: number;
+  hudAutoHide: boolean;
+  immersiveHud: boolean;
+  highContrast: boolean;
+  colorBlindMode: 'none' | 'protanopia' | 'deuteranopia' | 'tritanopia';
+  reducedMotion: boolean;
+  touchControlsEnabled: boolean;
+  leftHandedTouch: boolean;
+  touchOpacity: number;
+  touchScale: number;
+  touchLookSensitivity: number;
+  gamepadDeadZone: number;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────
@@ -181,6 +193,18 @@ const DEFAULT_SETTINGS: GameSettings = {
   holdSprint: false,
   qualityPreset: 'medium',
   rendererMode: 'auto',
+  hudScale: 1,
+  hudAutoHide: false,
+  immersiveHud: false,
+  highContrast: false,
+  colorBlindMode: 'none',
+  reducedMotion: false,
+  touchControlsEnabled: false,
+  leftHandedTouch: false,
+  touchOpacity: 0.72,
+  touchScale: 1,
+  touchLookSensitivity: 0.9,
+  gamepadDeadZone: 0.18,
 };
 
 const INITIAL_STATE = {
