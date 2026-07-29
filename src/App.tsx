@@ -137,12 +137,12 @@ export default function App() {
           <GameView
             engineRef={engineRef}
             inputRef={inputRef}
-            onReady={() => {
+            onReady={async () => {
               // If loading from save, init with save data
               if (loadingSave !== null) {
                 const data = SaveManager.load(loadingSave);
                 if (data && engineRef.current) {
-                  engineRef.current.init(data);
+                  await engineRef.current.init(data);
                 }
                 setLoadingSave(null);
               }

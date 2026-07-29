@@ -3,11 +3,11 @@
 
 import { InputManager } from './systems/InputManager';
 import { GameRenderer } from './systems/Renderer';
-import { GameRenderer3D } from './systems/GameRenderer3D';
 import type { GameRenderBackend, RenderState } from './systems/renderTypes';
 import { useGameStore } from './state/gameStore';
 import type { GameFlag } from './state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from './state/inventoryStore';
+import { AudioManager } from '../audio/AudioManager';
 import { ROOMS, START_POSITIONS } from './config/rooms';
 import type { RoomDef, DoorDef } from './config/rooms';
 import type { SaveData } from './saves/SaveManager';
@@ -35,6 +35,7 @@ export interface InteractableObject {
 export class GameEngine {
   private input: InputManager;
   private renderer: GameRenderBackend;
+  private audio: AudioManager;
   private canvas: HTMLCanvasElement;
   private animationId: number = 0;
   private lastTime: number = 0;
@@ -75,21 +76,14 @@ export class GameEngine {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.input = new InputManager();
-    const rendererMode = useGameStore.getState().settings.rendererMode;
-    if (rendererMode === '2d') {
-      this.renderer = new GameRenderer(canvas);
-    } else {
-      try {
-        this.renderer = new GameRenderer3D(canvas);
-      } catch (error) {
-        console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
-        this.renderer = new GameRenderer(canvas);
-      }
-    }
+    this.renderer = new GameRenderer(canvas);
+    this.audio = AudioManager.getInstance();
+    this.audio.init();
     this.input.bind(canvas);
   }
 
   async init(startFromSave?: import('./saves/SaveManager').SaveData) {
+    await this.configureRenderer();
     const store = useGameStore.getState();
 
     if (startFromSave) {
@@ -143,7 +137,22 @@ export class GameEngine {
 
     this.spawnEnemies();
     this.buildInteractables();
+    this.updateRoomAmbience();
     this.resize();
+  }
+
+  private async configureRenderer() {
+    const rendererMode = useGameStore.getState().settings.rendererMode;
+    if (rendererMode === '2d') return;
+
+    try {
+      const { GameRenderer3D } = await import('./systems/GameRenderer3D');
+      this.renderer.destroy?.();
+      this.renderer = new GameRenderer3D(this.canvas);
+    } catch (error) {
+      console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
+      this.renderer = new GameRenderer(this.canvas);
+    }
   }
 
   private spawnEnemies() {
@@ -328,6 +337,7 @@ export class GameEngine {
     this.stop();
     this.input.unbind();
     this.renderer.destroy?.();
+    this.audio.stopAll();
   }
 
   private loop = (time: number) => {
@@ -346,6 +356,10 @@ export class GameEngine {
   private update(dt: number) {
     const store = useGameStore.getState();
     if (store.screen !== 'playing') return;
+
+    this.audio.setMasterVolume(store.settings.masterVolume);
+    this.audio.setMusicVolume(store.settings.musicVolume);
+    this.audio.setSfxVolume(store.settings.sfxVolume);
 
     // Tick game time
     if (store.screen === 'playing') {
@@ -511,6 +525,8 @@ export class GameEngine {
             this.fireWeapon('pistol');
           } else {
             // Click empty — reload hint
+            this.audio.ensureResumed();
+            this.audio.playHit();
             useGameStore.getState().showSubtitle('*Click* — Out of ammo. Press R to reload.', 1.5);
           }
         } else if (item && item.templateId === 'flaregun') {
@@ -537,6 +553,8 @@ export class GameEngine {
         if (healAmount > 0) {
           useGameStore.getState().healPlayer(healAmount);
           invStore.removeItem(healingItem.id, 1);
+          this.audio.ensureResumed();
+          this.audio.playPickup();
           useGameStore.getState().showSubtitle(`Used ${template.name}. +${healAmount} HP.`, 1.5);
         }
       } else {
@@ -636,6 +654,7 @@ export class GameEngine {
   private handleInteraction() {
     const nearest = this.findNearestInteractable();
     if (nearest && nearest.distance < 50) {
+      this.audio.ensureResumed();
       nearest.obj.action();
     }
   }
@@ -655,29 +674,36 @@ export class GameEngine {
         const invStore = useInventoryStore.getState();
         if (invStore.hasItem(door.lockKey)) {
           store.showSubtitle(`Unlocked with ${ITEM_TEMPLATES[door.lockKey]?.name}.`, 2);
+          this.audio.playDoor();
           this.doorStates[door.id] = true;
           store.setFlag(`door_unlocked_${door.id}` as GameFlag);
           this.transitionToRoom(door.targetRoom, door.targetX, door.targetY);
         } else {
+          this.audio.playHit();
           store.showSubtitle('This door is locked. You need the right keycard.', 2);
         }
       } else if (door.lockType === 'power') {
         if (store.hasFlag('power_restored')) {
           store.showSubtitle('The door hums and slides open.', 1);
+          this.audio.playDoor();
           this.doorStates[door.id] = true;
           this.transitionToRoom(door.targetRoom, door.targetX, door.targetY);
         } else {
+          this.audio.playHit();
           store.showSubtitle('No power. The electronic lock is dead.', 2);
         }
       } else if (door.lockType === 'puzzle' && door.lockKey) {
         if (store.hasFlag(`puzzle_${door.lockKey}_done`)) {
           store.showSubtitle('The lock disengages.', 1);
+          this.audio.playDoor();
           this.doorStates[door.id] = true;
           this.transitionToRoom(door.targetRoom, door.targetX, door.targetY);
         } else {
+          this.audio.playHit();
           store.showSubtitle('A specialized lock. You need to complete the nearby puzzle first.', 2);
         }
       } else {
+        this.audio.playHit();
         store.showSubtitle('Locked. Find another way.', 1.5);
       }
       return;
@@ -705,6 +731,17 @@ export class GameEngine {
 
     // Rebuild interactables for new room
     this.buildInteractables();
+    this.updateRoomAmbience();
+  }
+
+  private updateRoomAmbience() {
+    const room = ROOMS[this.currentRoomId];
+    if (!room) return;
+    this.audio.ensureResumed();
+    this.audio.stopAll();
+    if (room.safeRoom) this.audio.playSafeHum();
+    else if (room.ambience.includes('alarm')) this.audio.playAlarm();
+    else this.audio.playAmbientHum();
   }
 
   // ── Combat ────────────────────────────────────────────────────────────────
@@ -714,6 +751,8 @@ export class GameEngine {
 
     if (!store.consumeAmmo(weapon)) {
       // Click on empty
+      this.audio.ensureResumed();
+      this.audio.playHit();
       store.showSubtitle('*Click*', 0.3);
       return;
     }
@@ -726,6 +765,8 @@ export class GameEngine {
     store.setEffects({ muzzleFlash: 0.6 });
 
     // Audio subtitle
+    this.audio.ensureResumed();
+    this.audio.playGunshot();
     store.showSubtitle(weapon === 'pistol' ? 'BANG!' : 'FWOOSH!', 0.3);
 
     // Weapon recoil (push player back slightly)
@@ -788,6 +829,7 @@ export class GameEngine {
         enemy.health -= damage;
         enemy.staggerTimer = 0.4;
         enemy.state = 'stagger';
+        this.audio.playHit();
 
         this.hitEffects.push({ x: enemy.x, y: enemy.y, timer: 0.3 });
 
@@ -828,6 +870,8 @@ export class GameEngine {
     const tile = room.tiles[Math.floor(this.playerY / TILE)]?.[Math.floor(this.playerX / TILE)] ?? 1;
     const mat = tile === 3 ? 'water' : tile === 6 ? 'carpet' : tile === 7 ? 'metal' : 'concrete';
     useGameStore.getState().setEffects({ floorMaterial: mat as any });
+    this.audio.ensureResumed();
+    this.audio.playFootstep();
   }
 
   private pointToLineDistance(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -870,6 +914,8 @@ export class GameEngine {
 
     this.isReloading = true;
     this.reloadTimer = weaponType === 'pistol' ? 1.5 : 2.5;
+    this.audio.ensureResumed();
+    this.audio.playReload();
     useGameStore.getState().showSubtitle('Reloading...', this.reloadTimer);
   }
 
@@ -907,6 +953,7 @@ export class GameEngine {
 
       const newAmmo = currentAmmo + toReload;
       useGameStore.getState().setAmmo(weaponType, newAmmo, available - toReload);
+      this.audio.playPickup();
       useGameStore.getState().showSubtitle(`Reloaded. ${newAmmo}/${maxAmmo} rounds.`, 1);
     }
   }
@@ -998,6 +1045,7 @@ export class GameEngine {
           if (enemy.attackCooldown <= 0) {
             enemy.attackCooldown = 1.5;
             useGameStore.getState().damagePlayer(template.damage);
+            this.audio.playHit();
             useGameStore.getState().triggerShake(0.3);
             useGameStore.getState().showSubtitle('Hit!', 0.5);
           }
@@ -1045,6 +1093,7 @@ export class GameEngine {
           if (enemy.attackCooldown <= 0) {
             enemy.attackCooldown = 2;
             useGameStore.getState().damagePlayer(template.damage);
+            this.audio.playHit();
             useGameStore.getState().showSubtitle('Spores irritate your skin.', 1.5);
           }
         }
@@ -1112,6 +1161,7 @@ export class GameEngine {
 
     store.setFlag('power_restored');
     this.hasPower = true;
+    this.audio.playDoor();
     store.setObjective('Facility power restored. The escape platform blast doors are now accessible from the Power Control Room\'s east exit. Watch for the sterilization countdown.');
 
     // Start sterilization countdown (20 minutes real time)
@@ -1127,6 +1177,7 @@ export class GameEngine {
     const store = useGameStore.getState();
     store.setFlag('puzzle_neutralize_done');
     store.setFlag('corridor_unlocked');
+    this.audio.playDoor();
     store.showSubtitle('Chemical decontamination complete. The path to the maintenance corridor is open.', 3);
     this.buildInteractables();
   }
@@ -1134,6 +1185,7 @@ export class GameEngine {
   private solveValvePuzzle() {
     const store = useGameStore.getState();
     store.setFlag('puzzle_valve_done');
+    this.audio.playDoor();
     store.showSubtitle('The water drains away with a tremendous roar. The corridor is passable.', 3);
     this.buildInteractables();
   }
@@ -1144,6 +1196,7 @@ export class GameEngine {
 
     store.setFlag('puzzle_symbol_done');
     store.showSubtitle('The specimen containers click into alignment. A hidden compartment opens.', 2);
+    this.audio.playPickup();
 
     // Give reward
     invStore.addItem('security_badge');
@@ -1191,6 +1244,8 @@ export class GameEngine {
 
     store.addDocument(docId);
     store.openDocument(docId);
+    this.audio.ensureResumed();
+    this.audio.playPickup();
 
     // Mark as collected
     const pickup = this.documentPickups.find((p) => p.docId === docId);

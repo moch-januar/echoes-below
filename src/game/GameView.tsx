@@ -5,7 +5,7 @@ import { InputManager } from './systems/InputManager';
 interface GameViewProps {
   engineRef: React.MutableRefObject<GameEngine | null>;
   inputRef: React.MutableRefObject<InputManager | null>;
-  onReady?: () => void;
+  onReady?: () => void | Promise<void>;
 }
 
 export default function GameView({ engineRef, inputRef, onReady }: GameViewProps) {
@@ -19,6 +19,7 @@ export default function GameView({ engineRef, inputRef, onReady }: GameViewProps
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -26,14 +27,25 @@ export default function GameView({ engineRef, inputRef, onReady }: GameViewProps
     engineRef.current = engine;
     inputRef.current = engine.getInput();
 
-    engine.init();
-    engine.start();
-    onReady?.();
+    void (async () => {
+      await engine.init();
+      if (cancelled) {
+        engine.destroy();
+        return;
+      }
+      await onReady?.();
+      if (cancelled) {
+        engine.destroy();
+        return;
+      }
+      engine.start();
+    })();
 
     const handleResize = () => engine.resize();
     window.addEventListener('resize', handleResize);
 
     return () => {
+      cancelled = true;
       engine.destroy();
       window.removeEventListener('resize', handleResize);
     };

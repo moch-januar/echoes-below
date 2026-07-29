@@ -39,6 +39,7 @@ export class AudioManager {
   }
 
   ensureResumed() {
+    if (!this.initialized) this.init();
     if (this.ctx?.state === 'suspended') {
       this.ctx.resume();
     }
@@ -260,6 +261,7 @@ export class AudioManager {
       src.buffer = buf;
       src.loop = true;
       src.connect(gain);
+      src.start();
       return [src];
     });
   }
