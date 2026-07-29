@@ -169,17 +169,19 @@ Outcome:
 
 ### Stage 2 — Renderer/data separation hardening
 
+Status: completed as the second implementation milestone.
+
 Estimated effort: 1–2 days.
 
 Dependencies: Stage 1.
 
 Tasks:
 
-1. Extract `RenderState` and renderer interface into `src/game/systems/renderTypes.ts`.
-2. Move room-to-geometry conversion into `src/game/world/RoomGeometryBuilder.ts`.
-3. Add a renderer capability flag to settings: `rendererMode: 'auto' | '3d' | '2d'`.
-4. Add tests for save compatibility and inventory operations.
-5. Add a smoke test for `GameEngine.createSaveData()` against the v1 schema.
+1. Extract `RenderState` and renderer interface into `src/game/systems/renderTypes.ts`. Completed.
+2. Move room-to-geometry conversion into `src/game/world/RoomGeometryBuilder.ts`. Deferred to Stage 3 because the renderer boundary is now explicit and tested.
+3. Add a renderer capability flag to settings: `rendererMode: 'auto' | '3d' | '2d'`. Completed.
+4. Add tests for save compatibility and inventory operations. Completed.
+5. Add a smoke test for `GameEngine.createSaveData()` against the v1 schema. Deferred until a DOM/canvas test environment is added.
 
 ### Stage 3 — Performance pass for 3D renderer
 
@@ -388,6 +390,6 @@ Manual browser checklist:
 
 ## 7. Recommended Next Implementation Milestone
 
-The next safest engineering milestone is **Stage 2: Renderer/data separation hardening + save/inventory tests**.
+The next safest engineering milestone is **Stage 3: 3D performance hardening**.
 
-This should happen before adding physics, animation models, or complex AI because it protects the completed game from regressions while allowing the 3D layer to evolve quickly.
+Focus first on object pools, particle batching, room geometry caching, and optional renderer chunk splitting before adding physics, imported character models, or complex AI. This protects browser performance and keeps GitHub Pages deployment lightweight.

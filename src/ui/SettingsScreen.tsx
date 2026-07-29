@@ -1,4 +1,5 @@
 import { useGameStore } from '../game/state/gameStore';
+import type { RendererMode } from '../game/state/gameStore';
 
 export default function SettingsScreen() {
   const screen = useGameStore((s) => s.screen);
@@ -65,6 +66,17 @@ export default function SettingsScreen() {
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
+            </select>
+          </div>
+          <div className="setting-row">
+            <label>Renderer</label>
+            <select
+              value={settings.rendererMode}
+              onChange={(e) => updateSettings({ rendererMode: e.target.value as RendererMode })}
+            >
+              <option value="auto">Auto (3D with fallback)</option>
+              <option value="3d">Prefer 3D</option>
+              <option value="2d">Legacy 2D</option>
             </select>
           </div>
           <div className="setting-row">

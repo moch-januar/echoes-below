@@ -1,37 +1,11 @@
 // ── 2D Game Renderer ────────────────────────────────────────────────────────
 
-import type { RoomDef } from '../config/rooms';
-import type { EnemyInstance } from '../config/enemies';
 import { LightingSystem } from './LightingSystem';
 import { ParticleSystem } from './ParticleSystem';
 import { useGameStore } from '../state/gameStore';
-
-export interface RenderState {
-  playerX: number;
-  playerY: number;
-  playerAngle: number;
-  playerHealth: number;
-  playerHealthState: string;
-  playerFlashlightOn: boolean;
-  currentRoom: RoomDef | null;
-  enemies: EnemyInstance[];
-  interactableObjects: Array<{
-    x: number;
-    y: number;
-    radius: number;
-    type: string;
-    label: string;
-  }>;
-  cameraShake: number;
-  isAiming: boolean;
-  isCrouching: boolean;
-  staggerTimer: number;
-  screenWidth: number;
-  screenHeight: number;
-  gameTime: number;
-  playerMoveSpeed: number;
-  bobPhase: number;
-}
+import type { RenderState } from './renderTypes';
+import type { RoomDef } from '../config/rooms';
+import type { EnemyInstance } from '../config/enemies';
 
 const TILE = 20;
 const PI2 = Math.PI * 2;

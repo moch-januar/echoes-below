@@ -9,6 +9,8 @@ export type Screen =
 
 export type HealthState = 'fine' | 'injured' | 'critical' | 'dead';
 
+export type RendererMode = 'auto' | '3d' | '2d';
+
 export type GameFlag = string;
 
 export interface PlayerState {
@@ -142,6 +144,7 @@ export interface GameSettings {
   holdAim: boolean;
   holdSprint: boolean;
   qualityPreset: 'low' | 'medium' | 'high';
+  rendererMode: RendererMode;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────
@@ -177,6 +180,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   holdAim: false,
   holdSprint: false,
   qualityPreset: 'medium',
+  rendererMode: 'auto',
 };
 
 const INITIAL_STATE = {

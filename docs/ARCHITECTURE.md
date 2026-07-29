@@ -45,7 +45,7 @@ title → newGame → loading → playing ↔ pause
 
 ## Renderer Boundary
 
-`GameEngine.render()` builds a renderer-agnostic `RenderState`. The default renderer is now `GameRenderer3D.ts`, a Three.js/WebGL renderer that procedurally converts existing room tile maps into modular 3D environments. `Renderer.ts` remains available as a Canvas 2D fallback if WebGL initialization fails.
+`GameEngine.render()` builds a renderer-agnostic `RenderState` from the shared contract in `src/game/systems/renderTypes.ts`. The default renderer is now `GameRenderer3D.ts`, a Three.js/WebGL renderer that procedurally converts existing room tile maps into modular 3D environments. `Renderer.ts` remains available as a Canvas 2D fallback if WebGL initialization fails or when Settings → Display → Renderer is set to Legacy 2D.
 
 The current 3D renderer provides:
 - PBR `MeshStandardMaterial` materials

@@ -3,8 +3,8 @@
 
 import { InputManager } from './systems/InputManager';
 import { GameRenderer } from './systems/Renderer';
-import type { RenderState } from './systems/Renderer';
 import { GameRenderer3D } from './systems/GameRenderer3D';
+import type { GameRenderBackend, RenderState } from './systems/renderTypes';
 import { useGameStore } from './state/gameStore';
 import type { GameFlag } from './state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from './state/inventoryStore';
@@ -21,12 +21,6 @@ import { clamp, distance, angleBetween, isWalkableTile, isHazardTile, getTileSpe
 
 const TILE = 20;
 const PLAYER_RADIUS = 6;
-
-interface GameRenderBackend {
-  resize: (width: number, height: number) => void;
-  render: (state: RenderState) => void;
-  destroy?: () => void;
-}
 
 export interface InteractableObject {
   x: number;
@@ -81,11 +75,16 @@ export class GameEngine {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.input = new InputManager();
-    try {
-      this.renderer = new GameRenderer3D(canvas);
-    } catch (error) {
-      console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
+    const rendererMode = useGameStore.getState().settings.rendererMode;
+    if (rendererMode === '2d') {
       this.renderer = new GameRenderer(canvas);
+    } else {
+      try {
+        this.renderer = new GameRenderer3D(canvas);
+      } catch (error) {
+        console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
+        this.renderer = new GameRenderer(canvas);
+      }
     }
     this.input.bind(canvas);
   }
