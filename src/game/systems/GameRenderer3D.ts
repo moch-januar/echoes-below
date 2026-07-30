@@ -132,7 +132,7 @@ export class GameRenderer3D {
     this.renderer.setClearColor(0x030407, 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.35;
+    this.renderer.toneMappingExposure = 1.8;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -164,8 +164,8 @@ export class GameRenderer3D {
 
     this.scene.add(this.roomGroup, this.dynamicGroup, this.particleGroup, this.playerGroup);
     this.scene.add(this.playerSpot, this.playerSpotTarget, this.muzzleLight);
-    this.scene.add(new THREE.HemisphereLight(0x6f86aa, 0x0c0a0f, 0.55));
-    const cinematicFill = new THREE.DirectionalLight(0x9ab7f0, 0.48);
+    this.scene.add(new THREE.HemisphereLight(0x6f86aa, 0x0c0a0f, 0.8));
+    const cinematicFill = new THREE.DirectionalLight(0x9ab7f0, 0.7);
     cinematicFill.position.set(-4, 5, -3);
     cinematicFill.castShadow = false;
     this.scene.add(cinematicFill);
@@ -366,12 +366,12 @@ export class GameRenderer3D {
   }
 
   private addRoomFillLighting(width: number, height: number, ambientLight: number) {
-    const fill = new THREE.PointLight(0x8ea7d8, 1.35 + ambientLight * 2.5, Math.max(width, height) * 1.1, 1.3);
+    const fill = new THREE.PointLight(0x8ea7d8, 2.0 + ambientLight * 2.5, Math.max(width, height) * 1.1, 1.3);
     fill.position.set(width / 2, WALL_HEIGHT - 0.65, height / 2);
     fill.castShadow = false;
     this.roomGroup.add(fill);
 
-    const floorGlow = new THREE.PointLight(0x335c7d, 0.9, Math.max(width, height) * 0.8, 1.7);
+    const floorGlow = new THREE.PointLight(0x335c7d, 1.4, Math.max(width, height) * 0.8, 1.7);
     floorGlow.position.set(width / 2, 0.45, height / 2);
     floorGlow.castShadow = false;
     this.roomGroup.add(floorGlow);

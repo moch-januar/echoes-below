@@ -112,12 +112,14 @@ export default function HUD() {
 
       {/* Diagnostic: show current renderer mode */}
       <div style={{
-        position: 'absolute', bottom: 4, right: 4,
-        fontSize: 10, color: 'rgba(100,100,100,0.4)',
+        position: 'absolute', top: 4, left: 4,
+        fontSize: 13, fontWeight: 700,
+        color: '#ff0', background: 'rgba(0,0,0,0.8)',
+        padding: '3px 8px', borderRadius: 4,
         fontFamily: 'monospace', pointerEvents: 'none',
-        zIndex: 999,
+        zIndex: 9999,
       }}>
-        RENDERER: {rendererActive.toUpperCase()} (set: {settings.rendererMode.toUpperCase()})
+        [{rendererActive.toUpperCase()}] set:{settings.rendererMode.toUpperCase()}
       </div>
     </div>
   );
