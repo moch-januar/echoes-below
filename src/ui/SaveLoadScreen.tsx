@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useGameStore } from '../game/state/gameStore';
 import type { Screen } from '../game/state/gameStore';
 import { SaveManager } from '../game/saves/SaveManager';
 import { formatTime } from '../utils/helpers';
+import { useMenuKeyboardNavigation } from './useMenuKeyboardNavigation';
 
 interface SaveLoadScreenProps {
   onLoadSave: (slot: number) => void;
@@ -13,9 +14,11 @@ interface SaveLoadScreenProps {
 }
 
 export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, gameReady, returnScreen }: SaveLoadScreenProps) {
+  const saveLoadRef = useRef<HTMLDivElement>(null);
   const screen = useGameStore((s) => s.screen);
   const setScreen = useGameStore((s) => s.setScreen);
   const [message, setMessage] = useState<string | null>(null);
+  useMenuKeyboardNavigation(saveLoadRef, screen === 'saveLoad');
 
   if (screen !== 'saveLoad') return null;
 
@@ -67,7 +70,7 @@ export default function SaveLoadScreen({ onLoadSave, onSave, currentRoomId, game
 
   return (
     <div className="screen save-load-screen screen-overlay">
-      <div className="save-load-content">
+      <div className="save-load-content" ref={saveLoadRef}>
         <h2>{gameReady ? 'SAVE / LOAD GAME' : 'LOAD GAME'}</h2>
 
         {gameReady && !isSafeRoom && (

@@ -15,4 +15,28 @@ describe('gameStore renderer settings', () => {
 
     expect(useGameStore.getState().settings.rendererMode).toBe('2d');
   });
+
+  it('respects the camera shake accessibility setting at runtime', () => {
+    useGameStore.getState().updateSettings({ cameraShakeEnabled: false });
+    useGameStore.getState().triggerShake(0.5);
+
+    expect(useGameStore.getState().cameraShake).toBe(0);
+  });
+
+  it('reduces damage flash intensity when reduced flashing is enabled', () => {
+    useGameStore.getState().updateSettings({ reducedFlashing: true });
+    useGameStore.getState().damagePlayer(10);
+
+    expect(useGameStore.getState().effects.damageFlash).toBeLessThan(0.4);
+  });
+
+  it('updates and resets custom key bindings through settings state', () => {
+    useGameStore.getState().updateKeyBindings({ interact: ['KeyZ'] });
+
+    expect(useGameStore.getState().settings.keyBindings.interact).toEqual(['KeyZ']);
+
+    useGameStore.getState().resetKeyBindings();
+
+    expect(useGameStore.getState().settings.keyBindings.interact).toEqual(['KeyE']);
+  });
 });

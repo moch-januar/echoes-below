@@ -1,11 +1,15 @@
+import { useRef } from 'react';
 import { useGameStore } from '../game/state/gameStore';
 import { SaveManager } from '../game/saves/SaveManager';
 import { formatTime } from '../utils/helpers';
+import { useMenuKeyboardNavigation } from './useMenuKeyboardNavigation';
 
 export default function MainMenu() {
+  const menuRef = useRef<HTMLDivElement>(null);
   const setScreen = useGameStore((s) => s.setScreen);
   const resetGame = useGameStore((s) => s.resetGame);
   const hasSaves = SaveManager.hasAnySave();
+  useMenuKeyboardNavigation(menuRef);
 
   const handleNewGame = () => {
     resetGame();
@@ -30,7 +34,7 @@ export default function MainMenu() {
   return (
     <div className="screen main-menu">
       <div className="menu-bg" />
-      <div className="menu-content">
+      <div className="menu-content" ref={menuRef}>
         <div className="menu-title-block">
           <h1 className="menu-title">ECHOES BELOW</h1>
           <p className="menu-subtitle">A Survival-Horror Experience</p>

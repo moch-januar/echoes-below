@@ -1,5 +1,6 @@
 import { useGameStore } from '../game/state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from '../game/state/inventoryStore';
+import { formatKeyCode } from '../game/systems/inputBindings';
 
 export default function HUD() {
   const player = useGameStore((s) => s.player);
@@ -10,6 +11,7 @@ export default function HUD() {
   const subtitleText = useGameStore((s) => s.subtitleText);
   const currentObjective = useGameStore((s) => s.currentObjective);
   const settings = useGameStore((s) => s.settings);
+  const activeInputMethod = useGameStore((s) => s.activeInputMethod);
 
   const equippedWeapon = useInventoryStore((s) => s.equippedWeapon);
   const items = useInventoryStore((s) => s.items);
@@ -23,6 +25,14 @@ export default function HUD() {
   const weaponType = equippedItem?.templateId === 'flaregun' ? 'flaregun' : 'pistol';
   const weaponTemplate = equippedItem ? ITEM_TEMPLATES[equippedItem.templateId] : null;
   const subtitleClass = `subtitle-${settings.subtitleSize}`;
+  const promptMatch = interactionPrompt?.match(/^\[([^\]]+)\]\s*(.*)$/);
+  const promptKey = promptMatch?.[1] ?? 'E';
+  const promptText = promptMatch?.[2] ?? interactionPrompt;
+  const inputHint = activeInputMethod === 'gamepad'
+    ? 'Left Stick Move · Right Stick Aim · RT Fire · LT Aim · A Interact · Menu Pause'
+    : activeInputMethod === 'touch'
+      ? 'Stick Move · Swipe Look · FIRE/AIM Buttons · Tap Inventory/Map/Pause'
+      : `${formatKeyCode(settings.keyBindings.moveUp[0])}/${formatKeyCode(settings.keyBindings.moveLeft[0])}/${formatKeyCode(settings.keyBindings.moveDown[0])}/${formatKeyCode(settings.keyBindings.moveRight[0])} Move · Mouse Aim · ${formatKeyCode(settings.keyBindings.interact[0])} Interact · ${formatKeyCode(settings.keyBindings.inventory[0])} Inventory · ${formatKeyCode(settings.keyBindings.map[0])} Map · ${formatKeyCode(settings.keyBindings.pause[0])} Pause`;
 
   return (
     <div className={`hud hud-modern ${settings.hudAutoHide ? 'auto-hide' : ''} ${settings.immersiveHud ? 'immersive' : ''}`}>
@@ -80,8 +90,8 @@ export default function HUD() {
 
       {interactionPrompt && (
         <div className="hud-interaction modern-prompt">
-          <span className="prompt-key">E</span>
-          <span>{interactionPrompt.replace(/^\[E\]\s*/, '')}</span>
+          <span className="prompt-key">{promptKey}</span>
+          <span>{promptText}</span>
         </div>
       )}
 
@@ -96,7 +106,7 @@ export default function HUD() {
       </div>
 
       <div className="hud-hints input-hints">
-        WASD Move · Mouse Aim · E Interact · Tab Inventory · M Map · Esc Pause
+        {inputHint}
       </div>
     </div>
   );

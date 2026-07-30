@@ -5,6 +5,7 @@ import type { Screen } from './game/state/gameStore';
 import { GameEngine } from './game/GameEngine';
 import { InputManager } from './game/systems/InputManager';
 import { SaveManager } from './game/saves/SaveManager';
+import { loadStoredSettings } from './game/state/settingsPersistence';
 
 import GameView from './game/GameView';
 import MainMenu from './ui/MainMenu';
@@ -29,6 +30,7 @@ export default function App() {
   const prevScreen = useGameStore((s) => s.prevScreen);
   const setScreen = useGameStore((s) => s.setScreen);
   const resetGame = useGameStore((s) => s.resetGame);
+  const updateSettings = useGameStore((s) => s.updateSettings);
   const settings = useGameStore((s) => s.settings);
   const platform = usePlatformProfile();
 
@@ -37,6 +39,11 @@ export default function App() {
   const [gameReady, setGameReady] = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState('intake');
   const [loadingSave, setLoadingSave] = useState<number | null>(null);
+
+  useEffect(() => {
+    const storedSettings = loadStoredSettings();
+    if (storedSettings) updateSettings(storedSettings);
+  }, [updateSettings]);
 
   // ── Loading completion ────────────────────────────────────────────────────
   const handleLoadingComplete = useCallback(() => {
@@ -131,6 +138,7 @@ export default function App() {
       {(screen === 'loading' || (gameReady && (
         screen === 'playing' || screen === 'pause' || screen === 'inventory' ||
         screen === 'map' || screen === 'document' || screen === 'saveLoad' ||
+        screen === 'settings' || screen === 'controls' ||
         screen === 'death' || screen === 'ending'
       ))) && (
         <div className="game-layer">

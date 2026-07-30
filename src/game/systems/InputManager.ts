@@ -1,5 +1,8 @@
 // ── Input Manager ───────────────────────────────────────────────────────────
 
+import { cloneKeyBindings, DEFAULT_KEY_BINDINGS, normalizeKeyBindings } from './inputBindings';
+import type { KeyBindings, PartialKeyBindings } from './inputBindings';
+
 export interface KeyState {
   pressed: boolean;
   justPressed: boolean;
@@ -38,28 +41,10 @@ export class InputManager {
   private gamepadAimX: number = 0;
   private gamepadAimY: number = 0;
   private gamepadDeadZone: number = 0.18;
+  private invertY: boolean = false;
   private activeInputMethod: 'keyboardMouse' | 'touch' | 'gamepad' = 'keyboardMouse';
 
-  private actionMap: Record<string, string[]> = {
-    moveUp: ['KeyW', 'ArrowUp'],
-    moveDown: ['KeyS', 'ArrowDown'],
-    moveLeft: ['KeyA', 'ArrowLeft'],
-    moveRight: ['KeyD', 'ArrowRight'],
-    run: ['ShiftLeft', 'ShiftRight'],
-    crouch: ['ControlLeft', 'ControlRight', 'KeyC'],
-    interact: ['KeyE'],
-    reload: ['KeyR'],
-    inventory: ['Tab'],
-    map: ['KeyM'],
-    pause: ['Escape'],
-    useItem: ['KeyF'],
-    heal: ['KeyQ'],
-    slot1: ['Digit1'],
-    slot2: ['Digit2'],
-    slot3: ['Digit3'],
-    slot4: ['Digit4'],
-    slot5: ['Digit5'],
-  };
+  private actionMap: KeyBindings = cloneKeyBindings(DEFAULT_KEY_BINDINGS);
 
   private actionStates: Map<string, boolean> = new Map();
   private prevActionStates: Map<string, boolean> = new Map();
@@ -85,7 +70,7 @@ export class InputManager {
       this.keys.set(key, { pressed: true, justPressed: !state.pressed, justReleased: false });
 
       // Prevent default for game keys
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'Escape', 'Tab', 'KeyE', 'KeyR', 'KeyM', 'KeyF', 'KeyQ', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'KeyC'].includes(key)) {
+      if (Object.values(this.actionMap).some((keys) => keys.includes(key))) {
         e.preventDefault();
       }
     };
@@ -113,7 +98,7 @@ export class InputManager {
       this.activeInputMethod = 'keyboardMouse';
       if (this.isPointerLocked) {
         this.mouseX += e.movementX * this.sensitivity;
-        this.mouseY += e.movementY * this.sensitivity;
+        this.mouseY += e.movementY * this.sensitivity * (this.invertY ? -1 : 1);
       } else {
         const rect = canvas.getBoundingClientRect();
         this.mouseX = e.clientX - rect.left;
@@ -175,16 +160,6 @@ export class InputManager {
         this.keys.set(key, { ...state, justReleased: false });
       }
     }
-    for (const btn of this.mouseButtons) {
-      this.prevMouseButtons.add(btn);
-    }
-    for (const btn of this.virtualMouseButtons) {
-      this.prevMouseButtons.add(btn);
-    }
-    for (const btn of this.gamepadMouseButtons) {
-      this.prevMouseButtons.add(btn);
-    }
-
     // Update action states
     for (const [action, keys] of Object.entries(this.actionMap)) {
       const pressed = keys.some((k) => this.keys.get(k)?.pressed) || this.virtualActions.get(action) === true || this.gamepadActions.get(action) === true;
@@ -225,7 +200,7 @@ export class InputManager {
 
     if (Math.abs(this.gamepadAimX) > 0 || Math.abs(this.gamepadAimY) > 0) {
       this.mouseX += this.gamepadAimX * 12 * this.sensitivity;
-      this.mouseY += this.gamepadAimY * 12 * this.sensitivity;
+      this.mouseY += this.gamepadAimY * 12 * this.sensitivity * (this.invertY ? -1 : 1);
     }
 
     if (Math.abs(this.gamepadMoveX) > 0 || Math.abs(this.gamepadMoveY) > 0 || this.gamepadMouseButtons.size > 0 || Array.from(this.gamepadActions.values()).some(Boolean)) {
@@ -320,6 +295,24 @@ export class InputManager {
     this.gamepadDeadZone = Math.max(0.01, Math.min(0.6, deadZone));
   }
 
+  setInvertY(invertY: boolean) {
+    this.invertY = invertY;
+  }
+
+  setActionBindings(bindings: PartialKeyBindings) {
+    this.actionMap = normalizeKeyBindings(bindings);
+    this.setupActionDefaults();
+  }
+
+  resetActionBindings() {
+    this.actionMap = cloneKeyBindings(DEFAULT_KEY_BINDINGS);
+    this.setupActionDefaults();
+  }
+
+  getActionBindings(): KeyBindings {
+    return cloneKeyBindings(this.actionMap);
+  }
+
   setVirtualAction(action: string, active: boolean) {
     this.activeInputMethod = 'touch';
     this.virtualActions.set(action, active);
@@ -346,7 +339,7 @@ export class InputManager {
   addVirtualAimDelta(dx: number, dy: number) {
     this.activeInputMethod = 'touch';
     this.mouseX += dx * this.sensitivity;
-    this.mouseY += dy * this.sensitivity;
+    this.mouseY += dy * this.sensitivity * (this.invertY ? -1 : 1);
   }
 
   clearVirtualInputs() {
@@ -361,8 +354,13 @@ export class InputManager {
   }
 
   resetFrame() {
-    // Clear just-pressed/released flags after processing
+    // Clear just-pressed/released flags after processing and capture the
+    // current mouse/virtual/controller button set for next-frame edge checks.
     this.prevKeys.clear();
-    this.prevMouseButtons.clear();
+    this.prevMouseButtons = new Set([
+      ...this.mouseButtons,
+      ...this.virtualMouseButtons,
+      ...this.gamepadMouseButtons,
+    ]);
   }
 }

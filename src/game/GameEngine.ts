@@ -2,10 +2,12 @@
 // Main game loop, world simulation, entity updates, interaction handling
 
 import { InputManager } from './systems/InputManager';
+import { formatKeyCode } from './systems/inputBindings';
+import { resolveHoldToggleIntent } from './systems/inputIntent';
 import { GameRenderer } from './systems/Renderer';
 import type { GameRenderBackend, RenderState } from './systems/renderTypes';
 import { useGameStore } from './state/gameStore';
-import type { GameFlag } from './state/gameStore';
+import type { GameFlag, HealthState, Screen } from './state/gameStore';
 import { useInventoryStore, ITEM_TEMPLATES } from './state/inventoryStore';
 import { AudioManager } from '../audio/AudioManager';
 import { ROOMS, START_POSITIONS } from './config/rooms';
@@ -15,12 +17,21 @@ import { DOCUMENTS } from './config/documents';
 import type { DocumentDef } from './config/documents';
 import { getDocumentPickups } from './config/documents';
 import type { DocumentPickup } from './config/documents';
+import { ITEM_PICKUPS } from './config/itemPickups';
+import type { ItemPickupDef } from './config/itemPickups';
 import { ENEMY_TEMPLATES, getEnemyPlacements } from './config/enemies';
 import type { EnemyInstance, EnemyPlacement } from './config/enemies';
 import { clamp, distance, angleBetween, isWalkableTile, isHazardTile, getTileSpeedModifier, worldToTile, generateId } from '../utils/helpers';
 
 const TILE = 20;
 const PLAYER_RADIUS = 6;
+
+function healthStateFromValue(health: number): HealthState {
+  if (health <= 0) return 'dead';
+  if (health <= 25) return 'critical';
+  if (health <= 50) return 'injured';
+  return 'fine';
+}
 
 export interface InteractableObject {
   x: number;
@@ -72,6 +83,9 @@ export class GameEngine {
   // Ending state
   private sterilisationTimer: number = 0;
   private hasPower: boolean = false;
+  private sprintLatched: boolean = false;
+  private aimLatched: boolean = false;
+  private keyBindingSignature: string = '';
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -96,29 +110,32 @@ export class GameEngine {
       this.enemyStates = startFromSave.enemyStates || {};
       this.hasPower = startFromSave.flags.includes('power_restored');
 
-      // Restore game store
-      store.setPlayerPosition(startFromSave.player.x, startFromSave.player.y);
-      store.updatePlayer({ health: startFromSave.player.health, infected: startFromSave.player.infected });
-      store.gameTime = startFromSave.gameTime;
-      store.setObjective(startFromSave.objective);
-      store.documents = startFromSave.documents;
-      store.flags = new Set(startFromSave.flags);
+      // Restore stores through Zustand setState so React subscribers update.
+      useGameStore.setState((state) => ({
+        player: {
+          ...state.player,
+          x: startFromSave.player.x,
+          y: startFromSave.player.y,
+          health: startFromSave.player.health,
+          healthState: healthStateFromValue(startFromSave.player.health),
+          infected: startFromSave.player.infected,
+        },
+        gameTime: startFromSave.gameTime,
+        currentObjective: startFromSave.objective,
+        documents: [...startFromSave.documents],
+        flags: new Set(startFromSave.flags),
+        ammo: { ...startFromSave.ammo },
+        reserveAmmo: { ...startFromSave.reserveAmmo },
+        endingFlags: { ...startFromSave.endingFlags },
+        currentEnding: startFromSave.currentEnding,
+      }));
 
       // Restore inventory
-      const invStore = useInventoryStore.getState();
-      invStore.items = startFromSave.inventory.map((item) => ({
-        ...item,
-        templateId: item.templateId,
-      }));
-      invStore.storageItems = startFromSave.storage.map((item) => ({
-        ...item,
-        templateId: item.templateId,
-      }));
-      invStore.equippedWeapon = startFromSave.equippedWeapon;
-
-      // Restore ammo
-      store.ammo = startFromSave.ammo;
-      store.reserveAmmo = startFromSave.reserveAmmo;
+      useInventoryStore.setState({
+        items: startFromSave.inventory.map((item) => ({ ...item, templateId: item.templateId })),
+        storageItems: startFromSave.storage.map((item) => ({ ...item, templateId: item.templateId })),
+        equippedWeapon: startFromSave.equippedWeapon,
+      });
     } else {
       // Fresh start
       const startPos = START_POSITIONS.intake;
@@ -129,6 +146,7 @@ export class GameEngine {
 
       // Give starting equipment
       const invStore = useInventoryStore.getState();
+      invStore.resetInventory();
       invStore.addItem('utility_knife');
       invStore.addItem('pistol');
       invStore.addItem('pistol_ammo', 12);
@@ -163,11 +181,11 @@ export class GameEngine {
       const template = ENEMY_TEMPLATES[place.templateId];
       if (!template) continue;
 
-      const existingState = this.enemyStates[`${place.roomId}_${place.x}_${place.y}`];
+      const existingState = this.enemyStates[place.id] ?? this.enemyStates[`${place.roomId}_${place.x}_${place.y}`];
       if (existingState && existingState.dead) continue;
 
       const enemy: EnemyInstance = {
-        id: generateId(),
+        id: place.id,
         templateId: place.templateId,
         x: place.x,
         y: place.y,
@@ -227,6 +245,22 @@ export class GameEngine {
         label: 'Read Document',
         id: `doc_${pickup.docId}`,
         action: () => this.collectDocument(pickup.docId),
+      });
+    }
+
+    // Add configured item pickups that have not been collected in this save.
+    for (const pickup of ITEM_PICKUPS) {
+      if (pickup.roomId !== this.currentRoomId) continue;
+      if (store.hasFlag(`pickup_collected_${pickup.id}`)) continue;
+
+      this.interactables.push({
+        x: pickup.x,
+        y: pickup.y,
+        radius: 7,
+        type: 'item',
+        label: `Pick up ${pickup.label}`,
+        id: pickup.id,
+        action: () => this.collectItemPickup(pickup),
       });
     }
 
@@ -347,15 +381,19 @@ export class GameEngine {
     const dt = Math.min((time - this.lastTime) / 1000, 0.05); // Cap at 50ms
     this.lastTime = time;
 
+    this.input.update();
+    useGameStore.getState().setActiveInputMethod(this.input.getActiveInputMethod());
     this.update(dt);
     this.render();
-    this.input.update();
     this.input.resetFrame();
   };
 
   private update(dt: number) {
     const store = useGameStore.getState();
-    if (store.screen !== 'playing') return;
+    if (store.screen !== 'playing') {
+      this.handleOverlayInput(store.screen);
+      return;
+    }
 
     this.audio.setMasterVolume(store.settings.masterVolume);
     this.audio.setMusicVolume(store.settings.musicVolume);
@@ -377,9 +415,23 @@ export class GameEngine {
 
     this.input.setSensitivity(store.settings.mouseSensitivity);
     this.input.setGamepadDeadZone(store.settings.gamepadDeadZone);
+    this.input.setInvertY(store.settings.invertY);
+    const keyBindingSignature = JSON.stringify(store.settings.keyBindings);
+    if (keyBindingSignature !== this.keyBindingSignature) {
+      this.input.setActionBindings(store.settings.keyBindings);
+      this.keyBindingSignature = keyBindingSignature;
+    }
 
-    const isRunning = this.input.isActionActive('run') && !store.player.isCrouching;
+    const sprintIntent = resolveHoldToggleIntent({
+      holdMode: store.settings.holdSprint,
+      isHeld: this.input.isActionActive('run'),
+      justPressed: this.input.isActionJustPressed('run'),
+      latched: this.sprintLatched,
+    });
+    this.sprintLatched = sprintIntent.latched;
+
     const isCrouching = this.input.isActionActive('crouch');
+    const isRunning = sprintIntent.active && !isCrouching;
     const targetSpeed = isRunning ? 80 : isCrouching ? 25 : 50;
 
     // Smooth acceleration/deceleration
@@ -434,7 +486,14 @@ export class GameEngine {
     const mouseWorld = this.input.getWorldMousePosition(this.canvas.width, this.canvas.height);
     const angleToMouse = angleBetween(this.playerX, this.playerY, mouseWorld.x, mouseWorld.y);
 
-    const isAiming = this.input.isMouseButtonDown(2) || this.input.isMouseButtonDown(0);
+    const aimIntent = resolveHoldToggleIntent({
+      holdMode: store.settings.holdAim,
+      isHeld: this.input.isMouseButtonDown(2),
+      justPressed: this.input.isMouseJustPressed(2),
+      latched: this.aimLatched,
+    });
+    this.aimLatched = aimIntent.latched;
+    const isAiming = aimIntent.active || this.input.isMouseButtonDown(0);
 
     // Player angle follows mouse
     let playerAngle = angleToMouse;
@@ -628,11 +687,37 @@ export class GameEngine {
     this.updateInteractionPrompt();
   }
 
+  private handleOverlayInput(screen: Screen) {
+    if (screen === 'pause' && this.input.isActionJustPressed('pause')) {
+      useGameStore.getState().setScreen('playing');
+      this.input.lockPointer();
+    } else if (screen === 'inventory' && (this.input.isActionJustPressed('inventory') || this.input.isActionJustPressed('pause'))) {
+      useGameStore.getState().setScreen('playing');
+      this.input.lockPointer();
+    } else if (screen === 'map' && (this.input.isActionJustPressed('map') || this.input.isActionJustPressed('pause'))) {
+      useGameStore.getState().setScreen('playing');
+      this.input.lockPointer();
+    } else if (screen === 'document' && this.input.isActionJustPressed('pause')) {
+      useGameStore.getState().closeDocument();
+      this.input.lockPointer();
+    } else if ((screen === 'settings' || screen === 'controls' || screen === 'saveLoad') && this.input.isActionJustPressed('pause')) {
+      const store = useGameStore.getState();
+      const fallback = screen === 'saveLoad' ? 'playing' : 'title';
+      store.setScreen(store.prevScreen === 'playing' || store.prevScreen === 'pause' ? store.prevScreen : fallback);
+      if (store.prevScreen === 'playing') this.input.lockPointer();
+    }
+  }
+
   private updateInteractionPrompt() {
     const store = useGameStore.getState();
     const nearest = this.findNearestInteractable();
     if (nearest && nearest.distance < 50) {
-      store.setInteraction(`[E] ${nearest.obj.label}`);
+      const key = store.activeInputMethod === 'gamepad'
+        ? 'A'
+        : store.activeInputMethod === 'touch'
+          ? 'TAP'
+          : formatKeyCode(store.settings.keyBindings.interact[0] ?? 'KeyE');
+      store.setInteraction(`[${key}] ${nearest.obj.label}`);
     } else {
       store.setInteraction(null);
     }
@@ -762,7 +847,7 @@ export class GameEngine {
     this.muzzleFlashTimer = 0.1;
 
     // Muzzle flash screen effect
-    store.setEffects({ muzzleFlash: 0.6 });
+    store.setEffects({ muzzleFlash: store.settings.reducedFlashing ? 0.18 : 0.6 });
 
     // Audio subtitle
     this.audio.ensureResumed();
@@ -1162,7 +1247,7 @@ export class GameEngine {
     store.setFlag('power_restored');
     this.hasPower = true;
     this.audio.playDoor();
-    store.setObjective('Facility power restored. The escape platform blast doors are now accessible from the Power Control Room\'s east exit. Watch for the sterilization countdown.');
+    store.setObjective('Facility power restored. The evacuation platform is now accessible through the powered blast door in the Power Control Room. Watch for the sterilization countdown.');
 
     // Start sterilization countdown (20 minutes real time)
     store.setFlag('sterilization_active');
@@ -1254,6 +1339,30 @@ export class GameEngine {
     this.buildInteractables();
   }
 
+  private collectItemPickup(pickup: ItemPickupDef) {
+    const store = useGameStore.getState();
+    const invStore = useInventoryStore.getState();
+    const template = ITEM_TEMPLATES[pickup.templateId];
+
+    if (!template) {
+      store.showSubtitle('The item data is corrupted.', 1.5);
+      return;
+    }
+
+    const added = invStore.addItem(pickup.templateId, pickup.quantity);
+    if (!added) {
+      store.showSubtitle('Inventory full. Make room before taking this item.', 2);
+      return;
+    }
+
+    store.setFlag(`pickup_collected_${pickup.id}` as GameFlag);
+    this.audio.ensureResumed();
+    this.audio.playPickup();
+    const amount = pickup.quantity > 1 ? ` x${pickup.quantity}` : '';
+    store.showSubtitle(`Picked up ${template.name}${amount}.`, 1.8);
+    this.buildInteractables();
+  }
+
   // ── Rendering ─────────────────────────────────────────────────────────────
 
   private render() {
@@ -1339,7 +1448,7 @@ export class GameEngine {
       puzzleStates: this.puzzleStates,
       enemyStates: Object.fromEntries(
         this.enemies.map((e) => [
-          `${e.roomId}_${e.x}_${e.y}`,
+          e.id,
           { health: e.health, dead: e.dead, state: e.state },
         ])
       ),

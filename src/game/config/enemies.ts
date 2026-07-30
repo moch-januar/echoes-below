@@ -93,6 +93,7 @@ export const ENEMY_TEMPLATES: Record<string, EnemyDef> = {
 // ── Enemy Placements ────────────────────────────────────────────────────────
 
 export interface EnemyPlacement {
+  id: string;
   templateId: string;
   roomId: string;
   x: number;
@@ -104,19 +105,19 @@ export interface EnemyPlacement {
 export function getEnemyPlacements(): EnemyPlacement[] {
   return [
     // Intake — one hollow patrolling
-    { templateId: 'hollow', roomId: 'intake', x: 300, y: 200, patrolPath: [{ x: 300, y: 200 }, { x: 100, y: 200 }, { x: 100, y: 50 }] },
+    { id: 'enemy_intake_hollow_01', templateId: 'hollow', roomId: 'intake', x: 300, y: 200, patrolPath: [{ x: 300, y: 200 }, { x: 100, y: 200 }, { x: 100, y: 50 }] },
 
     // Security — one listener in the corner
-    { templateId: 'listener', roomId: 'security', x: 320, y: 240 },
+    { id: 'enemy_security_listener_01', templateId: 'listener', roomId: 'security', x: 320, y: 240 },
 
     // Corridor — two hollows in the water
-    { templateId: 'hollow', roomId: 'corridor', x: 200, y: 100, patrolPath: [{ x: 200, y: 100 }, { x: 350, y: 100 }] },
-    { templateId: 'hollow', roomId: 'corridor', x: 350, y: 150, patrolPath: [{ x: 350, y: 150 }, { x: 450, y: 150 }] },
+    { id: 'enemy_corridor_hollow_01', templateId: 'hollow', roomId: 'corridor', x: 200, y: 100, patrolPath: [{ x: 200, y: 100 }, { x: 350, y: 100 }] },
+    { id: 'enemy_corridor_hollow_02', templateId: 'hollow', roomId: 'corridor', x: 350, y: 150, patrolPath: [{ x: 350, y: 150 }, { x: 450, y: 150 }] },
 
     // Storage — one bloom blocking the hidden door
-    { templateId: 'bloom', roomId: 'storage', x: 120, y: 50 },
+    { id: 'enemy_storage_bloom_01', templateId: 'bloom', roomId: 'storage', x: 120, y: 50 },
 
     // Power — one listener guarding the panel
-    { templateId: 'listener', roomId: 'power', x: 200, y: 100 },
+    { id: 'enemy_power_listener_01', templateId: 'listener', roomId: 'power', x: 200, y: 100 },
   ];
 }

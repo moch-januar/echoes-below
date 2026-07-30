@@ -1,12 +1,16 @@
+import { useRef } from 'react';
 import { useGameStore } from '../game/state/gameStore';
 import type { RendererMode } from '../game/state/gameStore';
+import { useMenuKeyboardNavigation } from './useMenuKeyboardNavigation';
 
 export default function SettingsScreen() {
+  const settingsRef = useRef<HTMLDivElement>(null);
   const screen = useGameStore((s) => s.screen);
   const setScreen = useGameStore((s) => s.setScreen);
   const prevScreen = useGameStore((s) => s.prevScreen);
   const settings = useGameStore((s) => s.settings);
   const updateSettings = useGameStore((s) => s.updateSettings);
+  useMenuKeyboardNavigation(settingsRef, screen === 'settings');
 
   if (screen !== 'settings') return null;
 
@@ -16,7 +20,7 @@ export default function SettingsScreen() {
 
   return (
     <div className="screen settings-screen screen-overlay">
-      <div className="settings-content">
+      <div className="settings-content" ref={settingsRef}>
         <h2>SETTINGS</h2>
 
         <div className="settings-group">

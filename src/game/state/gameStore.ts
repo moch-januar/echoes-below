@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { DEFAULT_KEY_BINDINGS, normalizeKeyBindings } from '../systems/inputBindings';
+import type { KeyBindings, PartialKeyBindings } from '../systems/inputBindings';
+import { saveStoredSettings } from './settingsPersistence';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -10,6 +13,8 @@ export type Screen =
 export type HealthState = 'fine' | 'injured' | 'critical' | 'dead';
 
 export type RendererMode = 'auto' | '3d' | '2d';
+
+export type InputMethod = 'keyboardMouse' | 'touch' | 'gamepad';
 
 export type GameFlag = string;
 
@@ -127,6 +132,11 @@ export interface GameState {
 
   settings: GameSettings;
   updateSettings: (partial: Partial<GameSettings>) => void;
+  updateKeyBindings: (partial: PartialKeyBindings) => void;
+  resetKeyBindings: () => void;
+
+  activeInputMethod: InputMethod;
+  setActiveInputMethod: (method: InputMethod) => void;
 
   resetGame: () => void;
 }
@@ -157,6 +167,7 @@ export interface GameSettings {
   touchScale: number;
   touchLookSensitivity: number;
   gamepadDeadZone: number;
+  keyBindings: KeyBindings;
 }
 
 // ── Defaults ───────────────────────────────────────────────────────────────
@@ -205,6 +216,7 @@ const DEFAULT_SETTINGS: GameSettings = {
   touchScale: 1,
   touchLookSensitivity: 0.9,
   gamepadDeadZone: 0.18,
+  keyBindings: normalizeKeyBindings(DEFAULT_KEY_BINDINGS),
 };
 
 const INITIAL_STATE = {
@@ -230,6 +242,7 @@ const INITIAL_STATE = {
   effects: { ...DEFAULT_EFFECTS },
   particles: [] as Particle[],
   settings: { ...DEFAULT_SETTINGS },
+  activeInputMethod: 'keyboardMouse' as InputMethod,
 };
 
 // ── Store ───────────────────────────────────────────────────────────────────
@@ -253,7 +266,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       else if (newHealth <= 50) hs = 'injured';
 
       const bloodIntensity = Math.min(1, st.effects.bloodIntensity + amount / 100);
-      const damageFlash = 0.4;
+      const damageFlash = st.settings.reducedFlashing ? 0.12 : 0.4;
 
       return {
         player: {
@@ -359,7 +372,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   showSubtitle: (text, duration = 3) =>
     set({ subtitleText: text, subtitleTimer: duration }),
   triggerShake: (intensity) =>
-    set((st) => ({ cameraShake: Math.max(st.cameraShake, intensity) })),
+    set((st) => st.settings.cameraShakeEnabled
+      ? { cameraShake: Math.max(st.cameraShake, intensity) }
+      : st),
 
   setLoading: (progress, message) =>
     set({ loadingProgress: progress, loadingMessage: message }),
@@ -388,7 +403,34 @@ export const useGameStore = create<GameState>((set, get) => ({
   clearParticles: () => set({ particles: [] }),
 
   updateSettings: (partial) =>
-    set((st) => ({ settings: { ...st.settings, ...partial } })),
+    set((st) => {
+      const settings = { ...st.settings, ...partial };
+      saveStoredSettings(settings);
+      return { settings };
+    }),
+
+  updateKeyBindings: (partial) =>
+    set((st) => {
+      const settings = {
+        ...st.settings,
+        keyBindings: normalizeKeyBindings({ ...st.settings.keyBindings, ...partial }),
+      };
+      saveStoredSettings(settings);
+      return { settings };
+    }),
+
+  resetKeyBindings: () =>
+    set((st) => {
+      const settings = {
+        ...st.settings,
+        keyBindings: normalizeKeyBindings(DEFAULT_KEY_BINDINGS),
+      };
+      saveStoredSettings(settings);
+      return { settings };
+    }),
+
+  setActiveInputMethod: (method) =>
+    set((st) => st.activeInputMethod === method ? st : { activeInputMethod: method }),
 
   resetGame: () =>
     set({ ...INITIAL_STATE, player: { ...DEFAULT_PLAYER }, settings: get().settings }),
