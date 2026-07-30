@@ -12,6 +12,7 @@ export default function HUD() {
   const currentObjective = useGameStore((s) => s.currentObjective);
   const settings = useGameStore((s) => s.settings);
   const activeInputMethod = useGameStore((s) => s.activeInputMethod);
+  const rendererActive = useGameStore((s) => s.rendererActive);
 
   const equippedWeapon = useInventoryStore((s) => s.equippedWeapon);
   const items = useInventoryStore((s) => s.items);
@@ -107,6 +108,16 @@ export default function HUD() {
 
       <div className="hud-hints input-hints">
         {inputHint}
+      </div>
+
+      {/* Diagnostic: show current renderer mode */}
+      <div style={{
+        position: 'absolute', bottom: 4, right: 4,
+        fontSize: 10, color: 'rgba(100,100,100,0.4)',
+        fontFamily: 'monospace', pointerEvents: 'none',
+        zIndex: 999,
+      }}>
+        RENDERER: {rendererActive.toUpperCase()} (set: {settings.rendererMode.toUpperCase()})
       </div>
     </div>
   );

@@ -159,16 +159,32 @@ export class GameEngine {
     this.resize();
   }
 
+  /** Current renderer name for diagnostics */
+  public rendererName: string = '2d';
+
   private async configureRenderer() {
-    const rendererMode = useGameStore.getState().settings.rendererMode;
-    if (rendererMode === '2d') return;
+    const store = useGameStore.getState();
+    const rendererMode = store.settings.rendererMode;
+    console.info(`[Renderer] configureRenderer() called, settings.rendererMode="${rendererMode}"`);
+
+    if (rendererMode === '2d') {
+      this.rendererName = '2d';
+      store.setRendererActive('2d');
+      console.info('[Renderer] Keeping default Canvas 2D renderer (manual setting).');
+      return;
+    }
 
     try {
       const { GameRenderer3D } = await import('./systems/GameRenderer3D');
       this.renderer.destroy?.();
       this.renderer = new GameRenderer3D(this.canvas);
+      this.rendererName = '3d';
+      useGameStore.getState().setRendererActive('3d');
+      console.info('[Renderer] Three.js WebGL 3D renderer loaded successfully.');
     } catch (error) {
-      console.warn('WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
+      this.rendererName = '2d';
+      useGameStore.getState().setRendererActive('2d');
+      console.warn('[Renderer] WebGL 3D renderer unavailable; falling back to Canvas 2D renderer.', error);
       this.renderer = new GameRenderer(this.canvas);
     }
   }

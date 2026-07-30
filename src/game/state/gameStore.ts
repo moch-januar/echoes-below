@@ -135,6 +135,10 @@ export interface GameState {
   updateKeyBindings: (partial: PartialKeyBindings) => void;
   resetKeyBindings: () => void;
 
+  /** Actual renderer in use (diagnostic) */
+  rendererActive: string;
+  setRendererActive: (name: string) => void;
+
   activeInputMethod: InputMethod;
   setActiveInputMethod: (method: InputMethod) => void;
 
@@ -242,6 +246,7 @@ const INITIAL_STATE = {
   effects: { ...DEFAULT_EFFECTS },
   particles: [] as Particle[],
   settings: { ...DEFAULT_SETTINGS },
+  rendererActive: 'unknown',
   activeInputMethod: 'keyboardMouse' as InputMethod,
 };
 
@@ -431,6 +436,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setActiveInputMethod: (method) =>
     set((st) => st.activeInputMethod === method ? st : { activeInputMethod: method }),
+
+  setRendererActive: (name) =>
+    set({ rendererActive: name }),
 
   resetGame: () =>
     set({ ...INITIAL_STATE, player: { ...DEFAULT_PLAYER }, settings: get().settings }),
